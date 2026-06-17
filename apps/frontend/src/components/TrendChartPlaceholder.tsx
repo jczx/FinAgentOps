@@ -1,4 +1,4 @@
-import type { TrendPoint } from "../data/dashboardMock";
+import type { TrendPoint } from "../data/dashboardTypes";
 
 type TrendChartPlaceholderProps = {
 	data: TrendPoint[];

@@ -1,4 +1,4 @@
-import type { PipelineStatus } from "../data/dashboardMock";
+import type { PipelineStatus } from "../data/dashboardTypes";
 
 type PipelineStatusPanelProps = {
 	pipeline: PipelineStatus;

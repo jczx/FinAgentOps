@@ -1,4 +1,4 @@
-import type { AnalystMessage } from "../data/dashboardMock";
+import type { AnalystMessage } from "../data/dashboardTypes";
 
 type ChatPlaceholderProps = {
 	analyst: AnalystMessage[];

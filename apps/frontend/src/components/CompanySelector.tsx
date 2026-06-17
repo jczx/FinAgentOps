@@ -1,4 +1,4 @@
-import type { Company } from "../data/dashboardMock";
+import type { Company } from "../data/dashboardTypes";
 
 type CompanySelectorProps = {
 	company: Company;

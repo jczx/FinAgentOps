@@ -74,6 +74,46 @@ DevOps:
 
 ## Local Setup
 
+### Run Frontend and Backend Together
+
+The frontend now reads mock dashboard data from the FastAPI backend. You need two terminals: one terminal runs the backend API, and the other terminal runs the Vite frontend.
+
+Terminal 1, start the backend:
+
+```powershell
+cd apps/backend
+.\.venv\Scripts\Activate.ps1
+uvicorn app.main:app --reload
+```
+
+Terminal 2, start the frontend:
+
+```powershell
+cd apps/frontend
+npm install
+npm run dev
+```
+
+The frontend expects the backend URL from this environment variable:
+
+```text
+VITE_API_BASE_URL=http://127.0.0.1:8000
+```
+
+For local development, copy `apps/frontend/.env.example` to `apps/frontend/.env` if you need to customize the backend URL. Do not commit `.env`.
+
+Open the frontend at:
+
+```text
+http://localhost:5173
+```
+
+Open the backend API docs at:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
 ### Frontend
 
 The frontend dashboard shell lives in `apps/frontend/`.

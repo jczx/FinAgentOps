@@ -1,4 +1,4 @@
-import type { RiskProfile } from "../data/dashboardMock";
+import type { RiskProfile } from "../data/dashboardTypes";
 
 type RiskScorePanelProps = {
 	risk: RiskProfile;

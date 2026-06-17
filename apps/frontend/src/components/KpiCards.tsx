@@ -1,4 +1,4 @@
-import type { Kpi } from "../data/dashboardMock";
+import type { Kpi } from "../data/dashboardTypes";
 
 type KpiCardsProps = {
 	kpis: Kpi[];
