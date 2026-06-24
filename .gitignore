@@ -12,6 +12,7 @@ node_modules/
 dist/
 build/
 tree.txt
+logs/
 .DS_Store
 
 scratch.sql

@@ -9,6 +9,7 @@ from sqlalchemy import inspect, select, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
+from app.data.company_universe import CompanyMetadata, get_company_metadata
 from app.database import Base
 from app.db_models import (
 	CompanyRecord,
@@ -18,9 +19,7 @@ from app.db_models import (
 	RawSecCompanyFactsRecord,
 )
 
-AAPL_CIK = "0000320193"
 SEC_COMPANY_FACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
-SUPPORTED_TICKERS = {"AAPL": AAPL_CIK}
 IMPORTANT_FACTS = (
 	"Revenues",
 	"SalesRevenueNet",
@@ -51,15 +50,13 @@ NORMALIZED_FACT_PRIORITY = {
 
 
 def run_sec_company_ingestion(ticker: str, db: Session, engine: Engine) -> int:
-	normalized_ticker = ticker.upper()
-	if normalized_ticker not in SUPPORTED_TICKERS:
-		raise ValueError("Only AAPL is supported in the first SEC ingestion slice.")
+	company_metadata = get_company_metadata(ticker)
 
 	ensure_ingestion_schema(engine)
 
 	started_at = utc_now()
 	pipeline_run = PipelineRunRecord(
-		source_name=f"sec_companyfacts_{normalized_ticker.lower()}",
+		source_name=f"sec_companyfacts_{company_metadata.ticker.lower()}",
 		status="RUNNING",
 		started_at=started_at,
 		finished_at=None,
@@ -75,12 +72,16 @@ def run_sec_company_ingestion(ticker: str, db: Session, engine: Engine) -> int:
 	db.refresh(pipeline_run)
 
 	try:
-		cik = SUPPORTED_TICKERS[normalized_ticker]
-		payload = fetch_company_facts(cik)
-		company = upsert_company(db, normalized_ticker, payload)
+		payload = fetch_company_facts(company_metadata.cik)
+		company = upsert_company(db, company_metadata, payload)
 		remove_demo_financial_metrics(db, company)
-		upsert_raw_company_facts(db, normalized_ticker, cik, payload)
-		facts_processed = upsert_financial_facts(db, company, normalized_ticker, payload)
+		upsert_raw_company_facts(db, company_metadata, payload)
+		facts_processed = upsert_financial_facts(
+			db,
+			company,
+			company_metadata.ticker,
+			payload,
+		)
 		backfill_normalized_fact_names(db)
 		update_financial_metrics(db, company)
 
@@ -207,49 +208,54 @@ def fetch_company_facts(cik: str) -> dict[str, Any]:
 
 def upsert_company(
 	db: Session,
-	ticker: str,
+	company_metadata: CompanyMetadata,
 	payload: dict[str, Any],
 ) -> CompanyRecord:
-	company = db.scalar(select(CompanyRecord).where(CompanyRecord.ticker == ticker))
+	company = db.scalar(
+		select(CompanyRecord).where(
+			CompanyRecord.ticker == company_metadata.ticker,
+		),
+	)
 	if company is None:
 		company = CompanyRecord(
-			ticker=ticker,
-			name=payload.get("entityName", "Apple Inc."),
-			exchange="NASDAQ",
-			sector="Technology",
+			ticker=company_metadata.ticker,
+			name=payload.get("entityName", company_metadata.name),
+			exchange=company_metadata.exchange,
+			sector=company_metadata.sector,
 		)
 		db.add(company)
 		db.flush()
 	else:
-		company.name = payload.get("entityName", company.name)
+		company.name = payload.get("entityName", company_metadata.name)
+		company.exchange = company_metadata.exchange
+		company.sector = company_metadata.sector
 
 	return company
 
 
 def upsert_raw_company_facts(
 	db: Session,
-	ticker: str,
-	cik: str,
+	company_metadata: CompanyMetadata,
 	payload: dict[str, Any],
 ) -> None:
 	raw_record = db.scalar(
 		select(RawSecCompanyFactsRecord).where(
-			RawSecCompanyFactsRecord.ticker == ticker,
+			RawSecCompanyFactsRecord.ticker == company_metadata.ticker,
 		),
 	)
 
 	if raw_record is None:
 		raw_record = RawSecCompanyFactsRecord(
-			ticker=ticker,
-			cik=cik,
-			company_name=payload.get("entityName", ""),
+			ticker=company_metadata.ticker,
+			cik=company_metadata.cik,
+			company_name=payload.get("entityName", company_metadata.name),
 			response_json=payload,
 			fetched_at=utc_now(),
 		)
 		db.add(raw_record)
 	else:
-		raw_record.cik = cik
-		raw_record.company_name = payload.get("entityName", raw_record.company_name)
+		raw_record.cik = company_metadata.cik
+		raw_record.company_name = payload.get("entityName", company_metadata.name)
 		raw_record.response_json = payload
 		raw_record.fetched_at = utc_now()
 

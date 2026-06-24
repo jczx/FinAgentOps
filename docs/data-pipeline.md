@@ -10,7 +10,7 @@ Current database foundation:
 - SQLAlchemy creates the first tables during backend startup.
 - Seed data keeps the Apple/AAPL company row available in PostgreSQL.
 - API endpoints read from PostgreSQL instead of hardcoded Python mock data.
-- The first SEC ingestion script can fetch Apple/AAPL company facts from the public SEC API.
+- The SEC ingestion script can fetch company facts for the configured public-company universe.
 - A local Linux cron job in the Ubuntu VM runs the AAPL SEC ingestion daily.
 - No FRED, OpenAI, dbt, Airflow, or agent workflow is used yet.
 
@@ -30,12 +30,32 @@ Initial data folders:
 
 ## SEC Company Facts Ingestion
 
-The current ingestion script supports only AAPL. This narrow scope keeps the foundation understandable before expanding to multiple companies.
+The current ingestion script supports this 15-company large-cap SEC filer universe:
 
-Source endpoint:
+| Ticker | CIK | Company |
+| --- | --- | --- |
+| `AAPL` | `0000320193` | Apple Inc. |
+| `MSFT` | `0000789019` | Microsoft Corporation |
+| `GOOGL` | `0001652044` | Alphabet Inc. |
+| `AMZN` | `0001018724` | Amazon.com Inc. |
+| `NVDA` | `0001045810` | NVIDIA Corporation |
+| `META` | `0001326801` | Meta Platforms Inc. |
+| `AVGO` | `0001730168` | Broadcom Inc. |
+| `TSLA` | `0001318605` | Tesla Inc. |
+| `BRK.B` | `0001067983` | Berkshire Hathaway Inc. |
+| `LLY` | `0000059478` | Eli Lilly and Company |
+| `JPM` | `0000019617` | JPMorgan Chase & Co. |
+| `WMT` | `0000104169` | Walmart Inc. |
+| `V` | `0001403161` | Visa Inc. |
+| `ORCL` | `0001341439` | Oracle Corporation |
+| `MA` | `0001141391` | Mastercard Incorporated |
+
+The mapping lives in `apps/backend/app/data/company_universe.py`.
+
+Source endpoint pattern:
 
 ```text
-https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json
+https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json
 ```
 
 Required environment variables:
@@ -53,6 +73,8 @@ Run manually from the repository root on Windows:
 
 ```powershell
 python scripts/ingest_sec_company.py --ticker AAPL
+python scripts/ingest_sec_company.py --ticker MSFT
+python scripts/ingest_sec_company.py --all
 ```
 
 Run manually from the Ubuntu VM clone:
@@ -60,14 +82,20 @@ Run manually from the Ubuntu VM clone:
 ```bash
 cd /home/julio/FinAgentOps
 /home/julio/FinAgentOps/.venv/bin/python scripts/ingest_sec_company.py --ticker AAPL
+/home/julio/FinAgentOps/.venv/bin/python scripts/ingest_sec_company.py --ticker MSFT
+/home/julio/FinAgentOps/.venv/bin/python scripts/ingest_sec_company.py --all
 ```
 
-The script performs four steps:
+When `--ticker` is used, the script ingests one supported company. When `--all` is used, the script loops through every company in `company_universe.py`.
+
+For each company, the script performs four steps:
 
 1. Fetch the public SEC company facts JSON.
 2. Store the untouched response in `raw_sec_company_facts`.
 3. Extract annual `10-K` facts into `financial_facts`.
-4. Update or insert AAPL yearly rows in `financial_metrics`.
+4. Update or insert yearly rows in `financial_metrics`.
+
+The ingestion is idempotent. Running the same ticker again updates the raw SEC response, extracted facts, and yearly metrics instead of creating duplicate yearly metric rows.
 
 Extracted facts:
 
@@ -134,6 +162,8 @@ Follow the log live while testing:
 tail -f /home/julio/FinAgentOps/logs/sec_ingestion.log
 ```
 
+This cron job has not been changed to `--all` yet. It still runs AAPL only.
+
 This is a local development scheduler. It is useful for learning and proving the pipeline works end to end, but it is not the final production scheduler. Later, the ingestion can be migrated to a cloud-native schedule such as GitHub Actions scheduled workflows, Google Cloud Scheduler plus Cloud Run Jobs, or another managed orchestration tool.
 
 ## Verification Queries
@@ -143,13 +173,53 @@ After running the ingestion, connect to PostgreSQL and verify the raw payload:
 ```sql
 SELECT
 	  ticker
+	, name
+	, exchange
+	, sector
+FROM companies
+WHERE ticker IN (
+	  'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA'
+	, 'META', 'AVGO', 'TSLA', 'BRK.B', 'LLY'
+	, 'JPM', 'WMT', 'V', 'ORCL', 'MA'
+)
+ORDER BY ticker;
+```
+
+Verify raw SEC payloads:
+
+```sql
+SELECT
+	  ticker
 	, cik
 	, fetched_at
 FROM raw_sec_company_facts
-WHERE ticker = 'AAPL';
+WHERE ticker IN (
+	  'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA'
+	, 'META', 'AVGO', 'TSLA', 'BRK.B', 'LLY'
+	, 'JPM', 'WMT', 'V', 'ORCL', 'MA'
+)
+ORDER BY ticker;
 ```
 
 Verify extracted facts:
+
+```sql
+SELECT
+	  ticker
+	, COUNT(*) AS fact_rows
+	, MIN(fiscal_year) AS first_year
+	, MAX(fiscal_year) AS latest_year
+FROM financial_facts
+WHERE ticker IN (
+	  'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA'
+	, 'META', 'AVGO', 'TSLA', 'BRK.B', 'LLY'
+	, 'JPM', 'WMT', 'V', 'ORCL', 'MA'
+)
+GROUP BY ticker
+ORDER BY ticker;
+```
+
+Inspect extracted fact details for one company:
 
 ```sql
 SELECT
@@ -180,6 +250,26 @@ ORDER BY first_year;
 ```
 
 Verify transformed yearly metrics:
+
+```sql
+SELECT
+	  c.ticker
+	, COUNT(*) AS metric_rows
+	, MIN(fm.fiscal_year) AS first_year
+	, MAX(fm.fiscal_year) AS latest_year
+FROM financial_metrics fm
+JOIN companies c
+	ON c.id = fm.company_id
+WHERE c.ticker IN (
+	  'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA'
+	, 'META', 'AVGO', 'TSLA', 'BRK.B', 'LLY'
+	, 'JPM', 'WMT', 'V', 'ORCL', 'MA'
+)
+GROUP BY c.ticker
+ORDER BY c.ticker;
+```
+
+Inspect transformed yearly metrics for one company:
 
 ```sql
 SELECT
@@ -245,4 +335,36 @@ FROM pipeline_runs
 WHERE source_name = 'sec_companyfacts_aapl'
 ORDER BY last_run_at DESC
 LIMIT 10;
+```
+
+For a multi-company run, check all SEC companyfacts sources:
+
+```sql
+SELECT
+	  source_name
+	, status
+	, started_at
+	, finished_at
+	, records_processed
+	, error_message
+FROM pipeline_runs
+WHERE source_name IN (
+	  'sec_companyfacts_aapl'
+	, 'sec_companyfacts_msft'
+	, 'sec_companyfacts_googl'
+	, 'sec_companyfacts_amzn'
+	, 'sec_companyfacts_nvda'
+	, 'sec_companyfacts_meta'
+	, 'sec_companyfacts_avgo'
+	, 'sec_companyfacts_tsla'
+	, 'sec_companyfacts_brk.b'
+	, 'sec_companyfacts_lly'
+	, 'sec_companyfacts_jpm'
+	, 'sec_companyfacts_wmt'
+	, 'sec_companyfacts_v'
+	, 'sec_companyfacts_orcl'
+	, 'sec_companyfacts_ma'
+)
+ORDER BY last_run_at DESC
+LIMIT 25;
 ```
