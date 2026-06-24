@@ -270,7 +270,7 @@ GET http://127.0.0.1:8000/companies/MSFT/metrics
 GET http://127.0.0.1:8000/pipeline/status
 ```
 
-After schema changes that add metric timestamps, rerun SEC ingestion once so existing yearly metric rows receive `created_at` and `updated_at` values:
+After schema changes that add metric timestamps, rerun SEC ingestion once so existing yearly metric rows receive `created_at` and `updated_at` values. These PostgreSQL `TIMESTAMP` values are stored as Berlin-local time:
 
 ```bash
 cd /home/julio/FinAgentOps

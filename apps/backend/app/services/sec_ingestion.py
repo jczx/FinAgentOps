@@ -1,9 +1,10 @@
 import json
 import os
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import inspect, select, text
 from sqlalchemy.engine import Engine
@@ -20,6 +21,7 @@ from app.db_models import (
 )
 
 SEC_COMPANY_FACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
+BERLIN_TIMEZONE = ZoneInfo("Europe/Berlin")
 IMPORTANT_FACTS = (
 	"Revenues",
 	"SalesRevenueNet",
@@ -54,7 +56,7 @@ def run_sec_company_ingestion(ticker: str, db: Session, engine: Engine) -> int:
 
 	ensure_ingestion_schema(engine)
 
-	started_at = utc_now()
+	started_at = berlin_now()
 	pipeline_run = PipelineRunRecord(
 		source_name=f"sec_companyfacts_{company_metadata.ticker.lower()}",
 		status="RUNNING",
@@ -85,7 +87,7 @@ def run_sec_company_ingestion(ticker: str, db: Session, engine: Engine) -> int:
 		backfill_normalized_fact_names(db)
 		update_financial_metrics(db, company)
 
-		finished_at = utc_now()
+		finished_at = berlin_now()
 		pipeline_run.status = "SUCCESS"
 		pipeline_run.records_processed = facts_processed
 		pipeline_run.steps_completed = 4
@@ -97,7 +99,7 @@ def run_sec_company_ingestion(ticker: str, db: Session, engine: Engine) -> int:
 		return facts_processed
 	except Exception as error:
 		db.rollback()
-		finished_at = utc_now()
+		finished_at = berlin_now()
 		pipeline_run.status = "FAILED"
 		pipeline_run.finished_at = finished_at
 		pipeline_run.last_run_at = finished_at
@@ -252,14 +254,14 @@ def upsert_raw_company_facts(
 			cik=company_metadata.cik,
 			company_name=payload.get("entityName", company_metadata.name),
 			response_json=payload,
-			fetched_at=utc_now(),
+			fetched_at=berlin_now(),
 		)
 		db.add(raw_record)
 	else:
 		raw_record.cik = company_metadata.cik
 		raw_record.company_name = payload.get("entityName", company_metadata.name)
 		raw_record.response_json = payload
-		raw_record.fetched_at = utc_now()
+		raw_record.fetched_at = berlin_now()
 
 
 def upsert_financial_facts(
@@ -384,7 +386,7 @@ def update_financial_metrics(db: Session, company: CompanyRecord) -> None:
 				FinancialMetricRecord.fiscal_period == fiscal_period,
 			),
 		)
-		processed_at = utc_now()
+		processed_at = berlin_now()
 
 		values = {
 			"fiscal_year": fiscal_year,
@@ -469,5 +471,5 @@ def parse_sec_date(value: str | None) -> datetime | None:
 	return datetime.strptime(value, "%Y-%m-%d")
 
 
-def utc_now() -> datetime:
-	return datetime.now(timezone.utc).replace(tzinfo=None)
+def berlin_now() -> datetime:
+	return datetime.now(BERLIN_TIMEZONE).replace(tzinfo=None)
