@@ -421,6 +421,8 @@ def update_financial_metrics(db: Session, company: CompanyRecord) -> None:
 			for field_name, value in values.items():
 				setattr(metric, field_name, value)
 
+	db.flush()
+
 
 def should_replace_fact(
 	current: FinancialFactRecord | None,

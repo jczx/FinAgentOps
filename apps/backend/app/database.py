@@ -21,11 +21,11 @@ if DATABASE_URL is None:
 		"PostgreSQL connection string there."
 	)
 
-engine = create_engine(
-	DATABASE_URL,
-	pool_pre_ping=True,
-	connect_args={"connect_timeout": 5},
-)
+engine_kwargs = {"pool_pre_ping": True}
+if DATABASE_URL.startswith("postgresql"):
+	engine_kwargs["connect_args"] = {"connect_timeout": 5}
+
+engine = create_engine(DATABASE_URL, **engine_kwargs)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 

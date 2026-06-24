@@ -11,7 +11,7 @@ Current database foundation:
 - Seed data keeps the Apple/AAPL company row available in PostgreSQL.
 - API endpoints read from PostgreSQL instead of hardcoded Python mock data.
 - The SEC ingestion script can fetch company facts for the configured public-company universe.
-- A local Linux cron job in the Ubuntu VM runs the AAPL SEC ingestion daily.
+- A local Linux cron job in the Ubuntu VM runs SEC ingestion for the full configured company universe daily.
 - No FRED, OpenAI, dbt, Airflow, or agent workflow is used yet.
 
 Current tables:
@@ -148,10 +148,10 @@ The older `free_cash_flow_margin` column is kept for compatibility, but it curre
 
 ## Local Cron Schedule
 
-The Ubuntu VM has a local Linux cron job that runs AAPL ingestion every day at `06:00` VM time:
+The Ubuntu VM has a local Linux cron job that runs the full configured SEC company universe every day at `06:00` VM time:
 
 ```cron
-0 6 * * * cd /home/julio/FinAgentOps && echo "========== $(date '+\%Y-\%m-\%d \%H:\%M:\%S') START SEC ingestion AAPL ==========" >> /home/julio/FinAgentOps/logs/sec_ingestion.log && /home/julio/FinAgentOps/.venv/bin/python scripts/ingest_sec_company.py --ticker AAPL >> /home/julio/FinAgentOps/logs/sec_ingestion.log 2>&1 && echo "========== $(date '+\%Y-\%m-\%d \%H:\%M:\%S') END SEC ingestion AAPL ==========" >> /home/julio/FinAgentOps/logs/sec_ingestion.log
+0 6 * * * cd /home/julio/FinAgentOps && echo "========== $(date '+\%Y-\%m-\%d \%H:\%M:\%S') START SEC ingestion ALL ==========" >> /home/julio/FinAgentOps/logs/sec_ingestion.log && /home/julio/FinAgentOps/.venv/bin/python scripts/ingest_sec_company.py --all >> /home/julio/FinAgentOps/logs/sec_ingestion.log 2>&1 && echo "========== $(date '+\%Y-\%m-\%d \%H:\%M:\%S') END SEC ingestion ALL ==========" >> /home/julio/FinAgentOps/logs/sec_ingestion.log
 ```
 
 Cron field meaning:
@@ -180,8 +180,6 @@ Follow the log live while testing:
 ```bash
 tail -f /home/julio/FinAgentOps/logs/sec_ingestion.log
 ```
-
-This cron job has not been changed to `--all` yet. It still runs AAPL only.
 
 This is a local development scheduler. It is useful for learning and proving the pipeline works end to end, but it is not the final production scheduler. Later, the ingestion can be migrated to a cloud-native schedule such as GitHub Actions scheduled workflows, Google Cloud Scheduler plus Cloud Run Jobs, or another managed orchestration tool.
 

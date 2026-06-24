@@ -1,8 +1,8 @@
 # FinAgentOps Backend
 
-This folder contains the initial FastAPI backend foundation for FinAgentOps.
+This folder contains the FastAPI backend foundation for FinAgentOps.
 
-The API reads data from local PostgreSQL. The SEC ingestion script can fetch public Apple/AAPL company facts and transform them into yearly financial metrics.
+The API reads data from local PostgreSQL. The SEC ingestion script fetches public SEC company facts for the configured company universe and transforms them into yearly financial metrics.
 
 The first database version keeps things simple: SQLAlchemy creates the tables on startup, and the seed function keeps the Apple/AAPL company row available if it does not already exist. Alembic migrations will be added later when the schema becomes more mature.
 
@@ -73,9 +73,17 @@ Install dependencies:
 python -m pip install -r requirements.txt
 ```
 
+Run the backend tests:
+
+```powershell
+python -m pytest
+```
+
+The tests use a temporary SQLite database. This keeps the test suite fast and avoids requiring private PostgreSQL credentials in CI.
+
 ## SEC Company Facts Ingestion
 
-The first public-data ingestion slice supports Apple/AAPL only. It fetches the SEC company facts JSON for CIK `0000320193`, stores the original response in `raw_sec_company_facts`, extracts selected annual facts into `financial_facts`, and updates yearly AAPL rows in `financial_metrics`.
+The public-data ingestion slice supports the configured SEC company universe. It fetches SEC company facts JSON, stores the original response in `raw_sec_company_facts`, extracts selected annual facts into `financial_facts`, and updates yearly rows in `financial_metrics`.
 
 Required environment variables:
 
@@ -92,7 +100,13 @@ From the repository root, run:
 .\.venv\Scripts\python.exe scripts\ingest_sec_company.py --ticker AAPL
 ```
 
-The script is idempotent: rerunning it updates the raw response, extracted facts, and yearly metric rows without duplicating AAPL yearly metrics.
+Run all configured companies:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\ingest_sec_company.py --all
+```
+
+The script is idempotent: rerunning it updates the raw response, extracted facts, and yearly metric rows without duplicating yearly metrics.
 
 Revenue may appear under different SEC concepts. The ingestion maps these SEC concept names to the normalized metric `revenue`:
 

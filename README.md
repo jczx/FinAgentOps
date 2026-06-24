@@ -86,6 +86,29 @@ The MCP server exposes safe tools for listing tables, describing tables, reading
 
 ## Local Setup
 
+### Automated Checks
+
+Run the backend test suite from `apps/backend`:
+
+```powershell
+cd apps/backend
+..\..\.venv\Scripts\python.exe -m pytest
+```
+
+Run the frontend TypeScript and production build check from `apps/frontend`:
+
+```powershell
+cd apps/frontend
+npm.cmd run build
+```
+
+GitHub Actions runs the same two quality gates on pushes to `main` and on pull requests:
+
+- Backend tests with Python 3.11.
+- Frontend build with Node.js 22.
+
+The backend tests use a temporary SQLite database, so CI does not need your local PostgreSQL credentials, `.env`, or VMware database.
+
 ### Database
 
 FinAgentOps uses PostgreSQL for local backend data. The first database version is intentionally simple: the backend creates tables on startup and seeds Apple/AAPL sample data if it is missing.
@@ -185,7 +208,7 @@ cd /home/julio/FinAgentOps
 /home/julio/FinAgentOps/.venv/bin/python scripts/ingest_sec_company.py --all
 ```
 
-A local Linux cron job runs AAPL ingestion every day at `06:00` VM time. It changes into the repo directory, writes a start timestamp to `logs/sec_ingestion.log`, runs the ingestion script, appends stdout/stderr to the same log file, and writes an end timestamp if the command succeeds. The cron job has not been changed to `--all` yet.
+A local Linux cron job runs the full SEC company universe every day at `06:00` VM time. It changes into the repo directory, writes a start timestamp to `logs/sec_ingestion.log`, runs `scripts/ingest_sec_company.py --all`, appends stdout/stderr to the same log file, and writes an end timestamp if the command succeeds.
 
 Check the local scheduler log from inside the VM:
 
