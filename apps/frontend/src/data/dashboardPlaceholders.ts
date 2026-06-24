@@ -1,11 +1,4 @@
-import type { AnalystMessage, TrendPoint } from "./dashboardTypes";
-
-export const trendPlaceholder: TrendPoint[] = [
-	{ label: "Q1", value: 62 },
-	{ label: "Q2", value: 68 },
-	{ label: "Q3", value: 72 },
-	{ label: "Q4", value: 77 },
-];
+import type { AnalystMessage } from "./dashboardTypes";
 
 export const analystPlaceholder: AnalystMessage[] = [
 	{

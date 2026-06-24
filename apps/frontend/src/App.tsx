@@ -1,29 +1,28 @@
 import { useEffect, useState } from "react";
 import { ChatPlaceholder } from "./components/ChatPlaceholder";
 import { CompanySelector } from "./components/CompanySelector";
+import { FinancialCharts } from "./components/FinancialCharts";
 import { Footer } from "./components/Footer";
 import { Header } from "./components/Header";
 import { Hero } from "./components/Hero";
 import { KpiCards } from "./components/KpiCards";
 import { PipelineStatusPanel } from "./components/PipelineStatusPanel";
-import { RiskScorePanel } from "./components/RiskScorePanel";
-import { TrendChartPlaceholder } from "./components/TrendChartPlaceholder";
-import {
-	analystPlaceholder,
-	trendPlaceholder,
-} from "./data/dashboardPlaceholders";
+import { analystPlaceholder } from "./data/dashboardPlaceholders";
 import { fetchDashboardData, type DashboardApiData } from "./services/api";
 
 function App() {
+	const [selectedTicker, setSelectedTicker] = useState("AAPL");
 	const [dashboardData, setDashboardData] = useState<DashboardApiData | null>(
 		null,
 	);
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
+	const [isLoading, setIsLoading] = useState(true);
 
 	useEffect(() => {
 		let isMounted = true;
+		setIsLoading(true);
 
-		fetchDashboardData("AAPL")
+		fetchDashboardData(selectedTicker)
 			.then((data) => {
 				if (isMounted) {
 					setDashboardData(data);
@@ -34,12 +33,17 @@ function App() {
 				if (isMounted) {
 					setErrorMessage(error.message);
 				}
+			})
+			.finally(() => {
+				if (isMounted) {
+					setIsLoading(false);
+				}
 			});
 
 		return () => {
 			isMounted = false;
 		};
-	}, []);
+	}, [selectedTicker]);
 
 	const renderDashboard = () => {
 		if (errorMessage) {
@@ -52,7 +56,7 @@ function App() {
 			);
 		}
 
-		if (dashboardData === null) {
+		if (isLoading || dashboardData === null) {
 			return (
 				<section
 					className="state-panel"
@@ -60,25 +64,30 @@ function App() {
 					aria-labelledby="loading-title"
 				>
 					<p className="eyebrow">Loading</p>
-					<h1 id="loading-title">Loading dashboard data</h1>
-					<p>Fetching mock financial data from the FastAPI backend.</p>
+					<h1 id="loading-title">Loading financial data</h1>
+					<p>Reading company records and yearly metrics from PostgreSQL.</p>
 				</section>
 			);
 		}
 
-		const { company, kpis, risk, pipeline } = dashboardData;
+		const { companies, company, kpis, yearlyMetrics, pipeline } = dashboardData;
+		const latestMetric = yearlyMetrics[yearlyMetrics.length - 1];
 
 		return (
 			<>
 				<Hero company={company} />
 				<section className="dashboard-grid" aria-label="Financial dashboard">
 					<div className="dashboard-grid__primary">
-						<CompanySelector company={company} />
+						<CompanySelector
+							company={company}
+							companies={companies}
+							latestMetric={latestMetric}
+							onTickerChange={setSelectedTicker}
+						/>
 						<KpiCards kpis={kpis} />
-						<TrendChartPlaceholder data={trendPlaceholder} />
+						<FinancialCharts metrics={yearlyMetrics} />
 					</div>
 					<aside className="dashboard-grid__sidebar" aria-label="Analysis panels">
-						<RiskScorePanel risk={risk} />
 						<PipelineStatusPanel pipeline={pipeline} />
 						<ChatPlaceholder analyst={analystPlaceholder} />
 					</aside>

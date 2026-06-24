@@ -12,22 +12,43 @@ export type Kpi = {
 	trend: "up" | "down" | "flat";
 };
 
-export type RiskProfile = {
-	score: "Low" | "Medium" | "High";
-	summary: string;
-	factors: string[];
+export type YearlyFinancialMetric = {
+	ticker: string;
+	companyName: string;
+	fiscalYear: number | null;
+	fiscalPeriod: string;
+	revenue: number | null;
+	netIncome: number | null;
+	totalAssets: number | null;
+	totalLiabilities: number | null;
+	operatingCashFlow: number | null;
+	profitMargin: number;
+	debtToAssetsRatio: number | null;
+	returnOnAssets: number | null;
+	operatingCashFlowMargin: number | null;
+	revenueGrowth: number;
+	netIncomeGrowth: number | null;
+	createdAt: string | null;
+	updatedAt: string | null;
 };
 
 export type PipelineStatus = {
-	status: "Success" | "Warning" | "Failed";
+	status: string;
 	lastRun: string;
 	stepsCompleted: number;
 	totalSteps: number;
+	message: string;
+	runs: PipelineRun[];
 };
 
-export type TrendPoint = {
-	label: string;
-	value: number;
+export type PipelineRun = {
+	sourceName: string;
+	status: string;
+	startedAt: string | null;
+	finishedAt: string | null;
+	recordsProcessed: number;
+	errorMessage: string;
+	message: string;
 };
 
 export type AnalystMessage = {

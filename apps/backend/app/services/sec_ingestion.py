@@ -141,6 +141,8 @@ def ensure_ingestion_schema(engine: Engine) -> None:
 			"debt_to_assets_ratio": "DOUBLE PRECISION",
 			"return_on_assets": "DOUBLE PRECISION",
 			"operating_cash_flow_margin": "DOUBLE PRECISION",
+			"created_at": "TIMESTAMP",
+			"updated_at": "TIMESTAMP",
 		},
 	)
 
@@ -382,6 +384,7 @@ def update_financial_metrics(db: Session, company: CompanyRecord) -> None:
 				FinancialMetricRecord.fiscal_period == fiscal_period,
 			),
 		)
+		processed_at = utc_now()
 
 		values = {
 			"fiscal_year": fiscal_year,
@@ -398,6 +401,7 @@ def update_financial_metrics(db: Session, company: CompanyRecord) -> None:
 			"return_on_assets": safe_percentage(net_income, total_assets),
 			"operating_cash_flow_margin": safe_percentage(operating_cash_flow, revenue),
 			"free_cash_flow_margin": safe_percentage(operating_cash_flow, revenue),
+			"updated_at": processed_at,
 		}
 
 		if metric is None:
@@ -405,10 +409,13 @@ def update_financial_metrics(db: Session, company: CompanyRecord) -> None:
 				FinancialMetricRecord(
 					company_id=company.id,
 					fiscal_period=fiscal_period,
+					created_at=processed_at,
 					**values,
 				),
 			)
 		else:
+			if metric.created_at is None:
+				metric.created_at = processed_at
 			for field_name, value in values.items():
 				setattr(metric, field_name, value)
 

@@ -1,4 +1,6 @@
 AGENTS.md
+DESIGN.md
+SQL_STANDARD.md
 .env
 .env.local
 .env.*

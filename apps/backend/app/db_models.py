@@ -49,6 +49,8 @@ class FinancialMetricRecord(Base):
 	return_on_assets: Mapped[float | None] = mapped_column(Float, nullable=True)
 	operating_cash_flow_margin: Mapped[float | None] = mapped_column(Float, nullable=True)
 	free_cash_flow_margin: Mapped[float] = mapped_column(Float)
+	created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+	updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 	company: Mapped[CompanyRecord] = relationship(back_populates="metrics")
 

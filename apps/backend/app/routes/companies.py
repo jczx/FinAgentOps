@@ -43,6 +43,20 @@ def company_response(company: CompanyRecord) -> Company:
 	)
 
 
+def optional_datetime_iso(value: object) -> str | None:
+	if value is None:
+		return None
+
+	if hasattr(value, "isoformat"):
+		return value.isoformat()
+
+	return str(value)
+
+
+def safe_float(value: float | None) -> float:
+	return 0.0 if value is None else value
+
+
 def get_company_record_or_404(ticker: str, db: Session) -> CompanyRecord:
 	normalized_ticker = normalize_ticker(ticker)
 
@@ -91,15 +105,20 @@ def get_company_metrics(
 			.where(FinancialMetricRecord.company_id == company.id)
 			.where(FinancialMetricRecord.fiscal_period != "Demo FY")
 			.where(FinancialMetricRecord.fiscal_year.is_not(None))
-			.order_by(desc(FinancialMetricRecord.fiscal_year)),
+			.order_by(FinancialMetricRecord.fiscal_year),
 		).all()
 	except SQLAlchemyError as error:
 		raise database_unavailable_error() from error
 
 	if not metric_records:
-		return CompanyMetricsResponse(ticker=company.ticker, metrics=[], yearly_metrics=[])
+		return CompanyMetricsResponse(
+			ticker=company.ticker,
+			company_name=company.name,
+			metrics=[],
+			yearly_metrics=[],
+		)
 
-	metric_record = metric_records[0]
+	metric_record = metric_records[-1]
 	metrics = [
 		Metric(
 			label="Revenue",
@@ -115,19 +134,23 @@ def get_company_metrics(
 		),
 		Metric(
 			label="Revenue growth",
-			value=metric_record.revenue_growth,
+			value=safe_float(metric_record.revenue_growth),
 			unit="percent",
 			description="Year-over-year top-line growth.",
 		),
 		Metric(
 			label="Profit margin",
-			value=metric_record.profit_margin,
+			value=safe_float(metric_record.profit_margin),
 			unit="percent",
 			description="Net income as a share of revenue.",
 		),
 		Metric(
 			label="Debt-to-assets",
-			value=metric_record.debt_to_assets_ratio or metric_record.debt_to_assets,
+			value=(
+				metric_record.debt_to_assets_ratio
+				if metric_record.debt_to_assets_ratio is not None
+				else safe_float(metric_record.debt_to_assets)
+			),
 			unit="percent",
 			description="Debt compared with total assets.",
 		),
@@ -151,9 +174,12 @@ def get_company_metrics(
 
 	return CompanyMetricsResponse(
 		ticker=company.ticker,
+		company_name=company.name,
 		metrics=metrics,
 		yearly_metrics=[
 			YearlyFinancialMetric(
+				ticker=company.ticker,
+				company_name=company.name,
 				fiscal_year=row.fiscal_year,
 				fiscal_period=row.fiscal_period,
 				revenue=row.revenue,
@@ -161,12 +187,14 @@ def get_company_metrics(
 				total_assets=row.total_assets,
 				total_liabilities=row.total_liabilities,
 				operating_cash_flow=row.operating_cash_flow,
-				profit_margin=row.profit_margin,
+				profit_margin=safe_float(row.profit_margin),
 				debt_to_assets_ratio=row.debt_to_assets_ratio,
 				return_on_assets=row.return_on_assets,
 				operating_cash_flow_margin=row.operating_cash_flow_margin,
-				revenue_growth=row.revenue_growth,
+				revenue_growth=safe_float(row.revenue_growth),
 				net_income_growth=row.net_income_growth,
+				created_at=optional_datetime_iso(getattr(row, "created_at", None)),
+				updated_at=optional_datetime_iso(getattr(row, "updated_at", None)),
 			)
 			for row in metric_records
 		],

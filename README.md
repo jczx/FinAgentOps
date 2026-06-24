@@ -49,7 +49,7 @@ AI:
 
 - Retrieval-Augmented Generation, also called RAG
 - LangGraph
-- MCP in a later phase
+- MCP for safe tool access to local project data
 
 DevOps:
 
@@ -71,6 +71,18 @@ DevOps:
 10. MCP tools
 11. Docker and CI/CD
 12. Deployment
+
+## MCP PostgreSQL Access
+
+FinAgentOps includes a local read-only MCP server for PostgreSQL inspection and analysis. It connects through `DATABASE_URL`, so it can reach the PostgreSQL Docker container running inside the Ubuntu VMware VM when the VM database port is reachable.
+
+Read the setup guide:
+
+```text
+docs/mcp.md
+```
+
+The MCP server exposes safe tools for listing tables, describing tables, reading company metrics, checking pipeline runs, and running read-only `SELECT` / `WITH` queries. It does not allow write operations.
 
 ## Local Setup
 
@@ -200,7 +212,7 @@ This cron setup is a local development scheduler. Later, the same ingestion work
 
 ### Run Frontend and Backend Together
 
-The frontend reads dashboard data from the FastAPI backend. The backend reads seeded sample data from PostgreSQL. You need three running pieces: PostgreSQL, the backend API, and the Vite frontend.
+The frontend reads live multi-company financial data from the FastAPI backend. The backend reads company records, SEC facts, yearly financial metrics, and pipeline status from PostgreSQL. You need three running pieces: PostgreSQL, the backend API, and the Vite frontend.
 
 First, ensure PostgreSQL is running. For local Docker Compose:
 
@@ -218,7 +230,7 @@ cd apps/backend
 uvicorn app.main:app --reload
 ```
 
-On startup, FastAPI creates any missing initial tables and runs the idempotent Apple/AAPL seed.
+On startup, FastAPI creates any missing initial tables and runs the idempotent Apple/AAPL seed. The dashboard company selector is populated from `GET /companies`, and each selected company loads yearly metrics from `GET /companies/{ticker}/metrics`.
 
 Terminal 2, start the frontend:
 
@@ -246,6 +258,23 @@ Open the backend API docs at:
 
 ```text
 http://127.0.0.1:8000/docs
+```
+
+Useful API checks:
+
+```text
+GET http://127.0.0.1:8000/companies
+GET http://127.0.0.1:8000/companies/AAPL
+GET http://127.0.0.1:8000/companies/AAPL/metrics
+GET http://127.0.0.1:8000/companies/MSFT/metrics
+GET http://127.0.0.1:8000/pipeline/status
+```
+
+After schema changes that add metric timestamps, rerun SEC ingestion once so existing yearly metric rows receive `created_at` and `updated_at` values:
+
+```bash
+cd /home/julio/FinAgentOps
+/home/julio/FinAgentOps/.venv/bin/python scripts/ingest_sec_company.py --all
 ```
 
 ### Frontend

@@ -23,6 +23,25 @@ Current tables:
 - `raw_sec_company_facts`
 - `financial_facts`
 
+## Dashboard API Usage
+
+The dashboard now uses real multi-company PostgreSQL data instead of hardcoded company options.
+
+Backend endpoints used by the frontend:
+
+```text
+GET /companies
+GET /companies/{ticker}
+GET /companies/{ticker}/metrics
+GET /pipeline/status
+```
+
+`GET /companies/{ticker}/metrics` returns yearly rows from `financial_metrics`, sorted by fiscal year. Each yearly metric includes the company ticker, company name, fiscal year, fiscal period, actual financial values, ratio KPIs, growth KPIs, `created_at`, and `updated_at`. Missing numeric values are returned as `null` where the database has no value, and the frontend displays available data without crashing.
+
+`financial_metrics.created_at` records when a yearly metric row was first created by ingestion. `financial_metrics.updated_at` records the most recent ingestion transformation time for that row. After deploying this schema change, rerun `scripts/ingest_sec_company.py --all` once so existing rows receive timestamp values.
+
+`GET /pipeline/status` returns the latest pipeline summary plus the latest pipeline runs so the dashboard can show operational ingestion status.
+
 Initial data folders:
 
 - `data/raw/` for source files as collected.
@@ -269,6 +288,26 @@ GROUP BY c.ticker
 ORDER BY c.ticker;
 ```
 
+Verify metric row coverage by company:
+
+```sql
+SELECT
+	  com.ticker
+	, COUNT( met.id )        AS metric_rows
+	, MIN( met.fiscal_year ) AS first_year
+	, MAX( met.fiscal_year ) AS latest_year
+FROM
+	public.companies  com
+LEFT JOIN
+	public.financial_metrics  met
+	ON com.id = met.company_id
+GROUP BY
+	  com.ticker
+ORDER BY
+	  com.ticker
+;
+```
+
 Inspect transformed yearly metrics for one company:
 
 ```sql
@@ -285,6 +324,8 @@ SELECT
 	, fm.operating_cash_flow_margin
 	, fm.revenue_growth
 	, fm.net_income_growth
+	, fm.created_at
+	, fm.updated_at
 FROM financial_metrics fm
 JOIN companies c
 	ON c.id = fm.company_id

@@ -22,6 +22,8 @@ class Metric(BaseModel):
 
 
 class YearlyFinancialMetric(BaseModel):
+	ticker: str
+	company_name: str
 	fiscal_year: int | None
 	fiscal_period: str
 	revenue: int | None
@@ -35,10 +37,13 @@ class YearlyFinancialMetric(BaseModel):
 	operating_cash_flow_margin: float | None
 	revenue_growth: float
 	net_income_growth: float | None
+	created_at: str | None = None
+	updated_at: str | None = None
 
 
 class CompanyMetricsResponse(BaseModel):
 	ticker: str
+	company_name: str
 	metrics: list[Metric]
 	yearly_metrics: list[YearlyFinancialMetric] = Field(default_factory=list)
 
@@ -50,9 +55,20 @@ class RiskScoreResponse(BaseModel):
 	factors: list[str]
 
 
+class PipelineRun(BaseModel):
+	source_name: str
+	status: str
+	started_at: str | None
+	finished_at: str | None
+	records_processed: int
+	error_message: str
+	message: str
+
+
 class PipelineStatusResponse(BaseModel):
 	status: str
 	last_run: str
 	steps_completed: int
 	total_steps: int
 	message: str
+	runs: list[PipelineRun] = Field(default_factory=list)
