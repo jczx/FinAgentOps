@@ -40,7 +40,7 @@ https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json
 Required environment variables:
 
 ```env
-DATABASE_URL=postgresql+psycopg2://finagentops_user:finagentops_password@192.168.136.131:5432/finagentops
+DATABASE_URL=postgresql+psycopg2://your_postgres_user:your_postgres_password@your_vm_ip:5432/your_database_name
 SEC_USER_AGENT=Your Name your.email@domain.com
 ```
 

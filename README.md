@@ -101,7 +101,7 @@ docker compose down
 Use this database URL in `.env`:
 
 ```env
-DATABASE_URL=postgresql+psycopg2://finagentops_user:finagentops_password@localhost:5432/finagentops
+DATABASE_URL=postgresql+psycopg2://your_postgres_user:your_postgres_password@localhost:5432/your_database_name
 ```
 
 #### Option 2: Ubuntu VMware VM
@@ -109,10 +109,10 @@ DATABASE_URL=postgresql+psycopg2://finagentops_user:finagentops_password@localho
 When PostgreSQL runs in Docker inside the Ubuntu VM at `192.168.136.131`, create or update `.env` in the repository root:
 
 ```env
-DATABASE_URL=postgresql+psycopg2://finagentops_user:finagentops_password@192.168.136.131:5432/finagentops
-POSTGRES_DB=finagentops
-POSTGRES_USER=finagentops_user
-POSTGRES_PASSWORD=finagentops_password
+DATABASE_URL=postgresql+psycopg2://your_postgres_user:your_postgres_password@your_vm_ip:5432/your_database_name
+POSTGRES_DB=your_database_name
+POSTGRES_USER=your_postgres_user
+POSTGRES_PASSWORD=your_postgres_password
 POSTGRES_PORT=5432
 ```
 
