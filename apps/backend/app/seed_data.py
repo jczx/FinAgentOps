@@ -26,24 +26,15 @@ def seed_database(db: Session) -> None:
 		db.add(apple)
 		db.flush()
 
-	existing_metric = db.scalar(
+	demo_metrics = db.scalars(
 		select(FinancialMetricRecord).where(
 			FinancialMetricRecord.company_id == apple.id,
 			FinancialMetricRecord.fiscal_period == "Demo FY",
 		),
-	)
+	).all()
 
-	if existing_metric is None:
-		db.add(
-			FinancialMetricRecord(
-				company_id=apple.id,
-				fiscal_period="Demo FY",
-				revenue_growth=8.2,
-				profit_margin=22.5,
-				debt_to_assets=31.4,
-				free_cash_flow_margin=18.7,
-			),
-		)
+	for metric in demo_metrics:
+		db.delete(metric)
 
 	existing_prediction = db.scalar(
 		select(ModelPredictionRecord).where(

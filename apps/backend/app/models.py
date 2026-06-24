@@ -21,9 +21,26 @@ class Metric(BaseModel):
 	description: str
 
 
+class YearlyFinancialMetric(BaseModel):
+	fiscal_year: int | None
+	fiscal_period: str
+	revenue: int | None
+	net_income: int | None
+	total_assets: int | None
+	total_liabilities: int | None
+	operating_cash_flow: int | None
+	profit_margin: float
+	debt_to_assets_ratio: float | None
+	return_on_assets: float | None
+	operating_cash_flow_margin: float | None
+	revenue_growth: float
+	net_income_growth: float | None
+
+
 class CompanyMetricsResponse(BaseModel):
 	ticker: str
 	metrics: list[Metric]
+	yearly_metrics: list[YearlyFinancialMetric] = Field(default_factory=list)
 
 
 class RiskScoreResponse(BaseModel):

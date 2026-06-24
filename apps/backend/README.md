@@ -2,9 +2,9 @@
 
 This folder contains the initial FastAPI backend foundation for FinAgentOps.
 
-The API reads seeded sample data from local PostgreSQL. It does not call external services such as SEC, FRED, OpenAI, or any other API.
+The API reads data from local PostgreSQL. The SEC ingestion script can fetch public Apple/AAPL company facts and transform them into yearly financial metrics.
 
-The first database version keeps things simple: SQLAlchemy creates the tables on startup, and the seed function inserts Apple/AAPL sample data if it does not already exist. Alembic migrations will be added later when the schema becomes more mature.
+The first database version keeps things simple: SQLAlchemy creates the tables on startup, and the seed function keeps the Apple/AAPL company row available if it does not already exist. Alembic migrations will be added later when the schema becomes more mature.
 
 ## Database Configuration
 
@@ -33,6 +33,7 @@ Create `.env` in the repository root:
 
 ```env
 DATABASE_URL=postgresql+psycopg2://finagentops_user:finagentops_password@localhost:5432/finagentops
+SEC_USER_AGENT=Your Name your.email@domain.com
 ```
 
 ### Option 2: PostgreSQL in Ubuntu VMware
@@ -45,6 +46,7 @@ POSTGRES_DB=finagentops
 POSTGRES_USER=finagentops_user
 POSTGRES_PASSWORD=finagentops_password
 POSTGRES_PORT=5432
+SEC_USER_AGENT=Your Name your.email@domain.com
 ```
 
 Confirm the VM database port is reachable from Windows:
@@ -71,6 +73,86 @@ Install dependencies:
 python -m pip install -r requirements.txt
 ```
 
+## SEC Company Facts Ingestion
+
+The first public-data ingestion slice supports Apple/AAPL only. It fetches the SEC company facts JSON for CIK `0000320193`, stores the original response in `raw_sec_company_facts`, extracts selected annual facts into `financial_facts`, and updates yearly AAPL rows in `financial_metrics`.
+
+Required environment variables:
+
+```env
+DATABASE_URL=postgresql+psycopg2://finagentops_user:finagentops_password@192.168.136.131:5432/finagentops
+SEC_USER_AGENT=Your Name your.email@domain.com
+```
+
+The SEC asks automated clients to send a descriptive `User-Agent` with contact information. Replace the placeholder with your real name/project and email before running the script.
+
+From the repository root, run:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\ingest_sec_company.py --ticker AAPL
+```
+
+The script is idempotent: rerunning it updates the raw response, extracted facts, and yearly metric rows without duplicating AAPL yearly metrics.
+
+Revenue may appear under different SEC concepts. The ingestion maps these SEC concept names to the normalized metric `revenue`:
+
+- `Revenues`
+- `SalesRevenueNet`
+- `RevenueFromContractWithCustomerExcludingAssessedTax`
+
+The original SEC concept name remains in `financial_facts.fact_name`, and the analytics meaning is stored in `financial_facts.normalized_metric_name`.
+
+To verify that data was inserted, connect to PostgreSQL and run:
+
+```sql
+SELECT
+	  ticker
+	, cik
+	, fetched_at
+FROM raw_sec_company_facts
+WHERE ticker = 'AAPL';
+
+SELECT
+	  ticker
+	, fact_name
+	, normalized_metric_name
+	, fiscal_year
+	, value
+FROM financial_facts
+WHERE ticker = 'AAPL'
+ORDER BY fiscal_year DESC, fact_name;
+
+SELECT
+	  fiscal_year
+	, revenue
+	, net_income
+	, total_assets
+	, total_liabilities
+	, operating_cash_flow
+	, profit_margin
+	, debt_to_assets_ratio
+	, return_on_assets
+	, operating_cash_flow_margin
+	, revenue_growth
+	, net_income_growth
+FROM financial_metrics fm
+JOIN companies c
+	ON c.id = fm.company_id
+WHERE c.ticker = 'AAPL'
+ORDER BY fiscal_year DESC;
+
+SELECT
+	  source_name
+	, status
+	, started_at
+	, finished_at
+	, records_processed
+	, error_message
+FROM pipeline_runs
+ORDER BY last_run_at DESC
+LIMIT 5;
+```
+
 Run the API:
 
 ```powershell
@@ -83,8 +165,10 @@ On startup, the backend creates these tables if they do not exist:
 - `financial_metrics`
 - `model_predictions`
 - `pipeline_runs`
+- `raw_sec_company_facts`
+- `financial_facts`
 
-It then runs an idempotent seed function. Repeated backend restarts do not create duplicate Apple/AAPL companies or duplicate demo records.
+It then runs an idempotent seed function. Repeated backend restarts do not create duplicate Apple/AAPL companies, and old `Demo FY` metric rows are removed in favor of real SEC-derived yearly metrics.
 
 Open the interactive API docs:
 

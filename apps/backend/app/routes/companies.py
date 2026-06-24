@@ -9,7 +9,13 @@ from app.db_models import (
 	FinancialMetricRecord,
 	ModelPredictionRecord,
 )
-from app.models import Company, CompanyMetricsResponse, Metric, RiskScoreResponse
+from app.models import (
+	Company,
+	CompanyMetricsResponse,
+	Metric,
+	RiskScoreResponse,
+	YearlyFinancialMetric,
+)
 
 router = APIRouter(prefix="/companies", tags=["companies"])
 
@@ -80,18 +86,33 @@ def get_company_metrics(
 	company = get_company_record_or_404(ticker, db)
 
 	try:
-		metric_record = db.scalar(
+		metric_records = db.scalars(
 			select(FinancialMetricRecord)
 			.where(FinancialMetricRecord.company_id == company.id)
-			.order_by(desc(FinancialMetricRecord.id)),
-		)
+			.where(FinancialMetricRecord.fiscal_period != "Demo FY")
+			.where(FinancialMetricRecord.fiscal_year.is_not(None))
+			.order_by(desc(FinancialMetricRecord.fiscal_year)),
+		).all()
 	except SQLAlchemyError as error:
 		raise database_unavailable_error() from error
 
-	if metric_record is None:
-		return CompanyMetricsResponse(ticker=company.ticker, metrics=[])
+	if not metric_records:
+		return CompanyMetricsResponse(ticker=company.ticker, metrics=[], yearly_metrics=[])
 
+	metric_record = metric_records[0]
 	metrics = [
+		Metric(
+			label="Revenue",
+			value=float(metric_record.revenue or 0),
+			unit="usd",
+			description=f"Total revenue for {metric_record.fiscal_period}.",
+		),
+		Metric(
+			label="Net income",
+			value=float(metric_record.net_income or 0),
+			unit="usd",
+			description=f"Net income for {metric_record.fiscal_period}.",
+		),
 		Metric(
 			label="Revenue growth",
 			value=metric_record.revenue_growth,
@@ -106,19 +127,50 @@ def get_company_metrics(
 		),
 		Metric(
 			label="Debt-to-assets",
-			value=metric_record.debt_to_assets,
+			value=metric_record.debt_to_assets_ratio or metric_record.debt_to_assets,
 			unit="percent",
 			description="Debt compared with total assets.",
 		),
 		Metric(
-			label="Free cash flow margin",
-			value=metric_record.free_cash_flow_margin,
+			label="Return on assets",
+			value=metric_record.return_on_assets or 0.0,
 			unit="percent",
-			description="Free cash flow as a share of revenue.",
+			description="Net income as a share of total assets.",
+		),
+		Metric(
+			label="Operating cash flow margin",
+			value=(
+				metric_record.operating_cash_flow_margin
+				if metric_record.operating_cash_flow_margin is not None
+				else metric_record.free_cash_flow_margin
+			),
+			unit="percent",
+			description="Operating cash flow as a share of revenue.",
 		),
 	]
 
-	return CompanyMetricsResponse(ticker=company.ticker, metrics=metrics)
+	return CompanyMetricsResponse(
+		ticker=company.ticker,
+		metrics=metrics,
+		yearly_metrics=[
+			YearlyFinancialMetric(
+				fiscal_year=row.fiscal_year,
+				fiscal_period=row.fiscal_period,
+				revenue=row.revenue,
+				net_income=row.net_income,
+				total_assets=row.total_assets,
+				total_liabilities=row.total_liabilities,
+				operating_cash_flow=row.operating_cash_flow,
+				profit_margin=row.profit_margin,
+				debt_to_assets_ratio=row.debt_to_assets_ratio,
+				return_on_assets=row.return_on_assets,
+				operating_cash_flow_margin=row.operating_cash_flow_margin,
+				revenue_growth=row.revenue_growth,
+				net_income_growth=row.net_income_growth,
+			)
+			for row in metric_records
+		],
+	)
 
 
 @router.get("/{ticker}/risk-score", response_model=RiskScoreResponse)

@@ -3,9 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import SQLAlchemyError
 
 from app import db_models
-from app.database import Base, SessionLocal, engine
+from app.database import SessionLocal, engine
 from app.routes import companies, health, pipeline
 from app.seed_data import seed_database
+from app.services.sec_ingestion import ensure_ingestion_schema
 
 app = FastAPI(
 	title="FinAgentOps API",
@@ -32,7 +33,7 @@ app.include_router(pipeline.router)
 @app.on_event("startup")
 def initialize_database() -> None:
 	try:
-		Base.metadata.create_all(bind=engine)
+		ensure_ingestion_schema(engine)
 		with SessionLocal() as db:
 			seed_database(db)
 		app.state.database_startup_error = None
