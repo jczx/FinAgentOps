@@ -124,6 +124,48 @@ Test-NetConnection 192.168.136.131 -Port 5432
 
 The `TcpTestSucceeded` value should be `True`.
 
+### SEC Ingestion and Local Scheduler
+
+SEC ingestion currently supports Apple/AAPL. The script fetches public SEC company facts, stores the untouched SEC JSON in PostgreSQL table `raw_sec_company_facts`, extracts structured accounting facts into `financial_facts`, and updates yearly metrics in `financial_metrics`. Each run is also logged in `pipeline_runs`.
+
+Before running ingestion, the Ubuntu VM and its Docker PostgreSQL container must be running. The repo clone used by the VM is:
+
+```text
+/home/julio/FinAgentOps
+```
+
+Run ingestion manually from inside the VM:
+
+```bash
+cd /home/julio/FinAgentOps
+/home/julio/FinAgentOps/.venv/bin/python scripts/ingest_sec_company.py --ticker AAPL
+```
+
+A local Linux cron job runs the same ingestion every day at `06:00` VM time. It changes into the repo directory, writes a start timestamp to `logs/sec_ingestion.log`, runs the ingestion script, appends stdout/stderr to the same log file, and writes an end timestamp if the command succeeds.
+
+Check the local scheduler log from inside the VM:
+
+```bash
+tail -n 100 /home/julio/FinAgentOps/logs/sec_ingestion.log
+```
+
+Verify recent pipeline runs in PostgreSQL:
+
+```sql
+SELECT
+	  source_name
+	, status
+	, started_at
+	, finished_at
+	, records_processed
+	, error_message
+FROM pipeline_runs
+ORDER BY last_run_at DESC
+LIMIT 10;
+```
+
+This cron setup is a local development scheduler. Later, the same ingestion workflow can be moved to a cloud scheduler such as GitHub Actions scheduled workflows, Cloud Run Jobs plus Cloud Scheduler, or another managed orchestration service.
+
 ### Run Frontend and Backend Together
 
 The frontend reads dashboard data from the FastAPI backend. The backend reads seeded sample data from PostgreSQL. You need three running pieces: PostgreSQL, the backend API, and the Vite frontend.

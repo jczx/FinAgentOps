@@ -11,7 +11,8 @@ Current database foundation:
 - Seed data keeps the Apple/AAPL company row available in PostgreSQL.
 - API endpoints read from PostgreSQL instead of hardcoded Python mock data.
 - The first SEC ingestion script can fetch Apple/AAPL company facts from the public SEC API.
-- No FRED, OpenAI, dbt, scheduler, Airflow, or agent workflow is used yet.
+- A local Linux cron job in the Ubuntu VM runs the AAPL SEC ingestion daily.
+- No FRED, OpenAI, dbt, Airflow, or agent workflow is used yet.
 
 Current tables:
 
@@ -46,10 +47,19 @@ SEC_USER_AGENT=Your Name your.email@domain.com
 
 `SEC_USER_AGENT` should identify the project and include a real contact email. The SEC uses this to contact automated clients if there is a traffic or access issue.
 
-Run from the repository root:
+Before running ingestion, the Ubuntu VM and the Docker PostgreSQL container inside the VM must be running. The script needs database access through `DATABASE_URL`, and the SEC request needs `SEC_USER_AGENT`.
+
+Run manually from the repository root on Windows:
 
 ```powershell
 python scripts/ingest_sec_company.py --ticker AAPL
+```
+
+Run manually from the Ubuntu VM clone:
+
+```bash
+cd /home/julio/FinAgentOps
+/home/julio/FinAgentOps/.venv/bin/python scripts/ingest_sec_company.py --ticker AAPL
 ```
 
 The script performs four steps:
@@ -88,6 +98,43 @@ Revenue is intentionally mapped from several SEC concepts because companies can 
 - `net_income_growth`
 
 The older `free_cash_flow_margin` column is kept for compatibility, but it currently mirrors operating cash flow margin until capital expenditure extraction is added.
+
+## Local Cron Schedule
+
+The Ubuntu VM has a local Linux cron job that runs AAPL ingestion every day at `06:00` VM time:
+
+```cron
+0 6 * * * cd /home/julio/FinAgentOps && echo "========== $(date '+\%Y-\%m-\%d \%H:\%M:\%S') START SEC ingestion AAPL ==========" >> /home/julio/FinAgentOps/logs/sec_ingestion.log && /home/julio/FinAgentOps/.venv/bin/python scripts/ingest_sec_company.py --ticker AAPL >> /home/julio/FinAgentOps/logs/sec_ingestion.log 2>&1 && echo "========== $(date '+\%Y-\%m-\%d \%H:\%M:\%S') END SEC ingestion AAPL ==========" >> /home/julio/FinAgentOps/logs/sec_ingestion.log
+```
+
+Cron field meaning:
+
+- `0` means minute zero.
+- `6` means hour six.
+- `* * *` means every day of the month, every month, every day of the week.
+
+In plain English, this means: run once per day at `06:00` according to the VM's local timezone.
+
+The command does three operationally useful things:
+
+1. Changes into `/home/julio/FinAgentOps` so relative paths work.
+2. Appends a timestamped start line to `logs/sec_ingestion.log`.
+3. Runs the ingestion script and appends normal output and errors to the same log file.
+4. Appends a timestamped end line when the ingestion command succeeds.
+
+Check the cron log from inside the VM:
+
+```bash
+tail -n 100 /home/julio/FinAgentOps/logs/sec_ingestion.log
+```
+
+Follow the log live while testing:
+
+```bash
+tail -f /home/julio/FinAgentOps/logs/sec_ingestion.log
+```
+
+This is a local development scheduler. It is useful for learning and proving the pipeline works end to end, but it is not the final production scheduler. Later, the ingestion can be migrated to a cloud-native schedule such as GitHub Actions scheduled workflows, Google Cloud Scheduler plus Cloud Run Jobs, or another managed orchestration tool.
 
 ## Verification Queries
 
@@ -182,4 +229,20 @@ SELECT
 FROM pipeline_runs
 ORDER BY last_run_at DESC
 LIMIT 5;
+```
+
+For a quick success/failure check of the scheduled job, filter to the SEC source:
+
+```sql
+SELECT
+	  source_name
+	, status
+	, started_at
+	, finished_at
+	, records_processed
+	, error_message
+FROM pipeline_runs
+WHERE source_name = 'sec_companyfacts_aapl'
+ORDER BY last_run_at DESC
+LIMIT 10;
 ```
