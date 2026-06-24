@@ -74,17 +74,77 @@ DevOps:
 
 ## Local Setup
 
+### Database
+
+FinAgentOps uses PostgreSQL for local backend data. The first database version is intentionally simple: the backend creates tables on startup and seeds Apple/AAPL sample data if it is missing.
+
+#### Option 1: Local Docker Compose
+
+Start PostgreSQL from the repository root:
+
+```powershell
+docker compose up -d postgres
+```
+
+Check that the container is running:
+
+```powershell
+docker compose ps
+```
+
+Stop PostgreSQL when you are finished:
+
+```powershell
+docker compose down
+```
+
+Use this database URL in `.env`:
+
+```env
+DATABASE_URL=postgresql+psycopg2://finagentops_user:finagentops_password@localhost:5432/finagentops
+```
+
+#### Option 2: Ubuntu VMware VM
+
+When PostgreSQL runs in Docker inside the Ubuntu VM at `192.168.136.131`, create or update `.env` in the repository root:
+
+```env
+DATABASE_URL=postgresql+psycopg2://finagentops_user:finagentops_password@192.168.136.131:5432/finagentops
+POSTGRES_DB=finagentops
+POSTGRES_USER=finagentops_user
+POSTGRES_PASSWORD=finagentops_password
+POSTGRES_PORT=5432
+```
+
+The backend reads `DATABASE_URL` at startup. The VM address belongs in `.env`, not in Python source code. Confirm connectivity from Windows before starting FastAPI:
+
+```powershell
+Test-NetConnection 192.168.136.131 -Port 5432
+```
+
+The `TcpTestSucceeded` value should be `True`.
+
 ### Run Frontend and Backend Together
 
-The frontend now reads mock dashboard data from the FastAPI backend. You need two terminals: one terminal runs the backend API, and the other terminal runs the Vite frontend.
+The frontend reads dashboard data from the FastAPI backend. The backend reads seeded sample data from PostgreSQL. You need three running pieces: PostgreSQL, the backend API, and the Vite frontend.
 
-Terminal 1, start the backend:
+First, ensure PostgreSQL is running. For local Docker Compose:
+
+```powershell
+docker compose up -d postgres
+```
+
+For VMware, start the PostgreSQL container inside Ubuntu and confirm port `5432` is reachable from Windows.
+
+Terminal 1, start the backend from Windows:
 
 ```powershell
 cd apps/backend
 .\.venv\Scripts\Activate.ps1
 uvicorn app.main:app --reload
 ```
+
+On startup, FastAPI creates any missing initial tables and runs the idempotent Apple/AAPL seed.
 
 Terminal 2, start the frontend:
 
@@ -157,7 +217,7 @@ To install backend dependencies:
 python -m pip install -r requirements.txt
 ```
 
-To run the local FastAPI server:
+To run the local FastAPI server after PostgreSQL is running:
 
 ```powershell
 uvicorn app.main:app --reload
@@ -169,4 +229,6 @@ Then open:
 http://127.0.0.1:8000/docs
 ```
 
-The database, data pipeline, machine learning workflow, and AI agent will be added in later project phases.
+The backend loads environment variables from either the repository root `.env` or `apps/backend/.env`. A backend-specific file takes precedence when both exist.
+
+The data ingestion pipeline, machine learning workflow, and AI agent will be added in later project phases.

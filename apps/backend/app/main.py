@@ -1,11 +1,15 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.exc import SQLAlchemyError
 
+from app import db_models
+from app.database import Base, SessionLocal, engine
 from app.routes import companies, health, pipeline
+from app.seed_data import seed_database
 
 app = FastAPI(
 	title="FinAgentOps API",
-	description="Mock backend API for the FinAgentOps financial dashboard.",
+	description="Backend API for the FinAgentOps financial dashboard.",
 	version="0.1.0",
 )
 
@@ -23,3 +27,14 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(companies.router)
 app.include_router(pipeline.router)
+
+
+@app.on_event("startup")
+def initialize_database() -> None:
+	try:
+		Base.metadata.create_all(bind=engine)
+		with SessionLocal() as db:
+			seed_database(db)
+		app.state.database_startup_error = None
+	except SQLAlchemyError as error:
+		app.state.database_startup_error = str(error)
