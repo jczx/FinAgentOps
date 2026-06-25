@@ -15,6 +15,7 @@ dist/
 build/
 tree.txt
 logs/
+docs/
 .DS_Store
 
 scratch.sql
