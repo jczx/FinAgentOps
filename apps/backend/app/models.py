@@ -48,6 +48,19 @@ class CompanyMetricsResponse(BaseModel):
 	yearly_metrics: list[YearlyFinancialMetric] = Field(default_factory=list)
 
 
+class CompanyComparisonItem(BaseModel):
+	ticker: str
+	company_name: str
+	latest_metric: YearlyFinancialMetric | None
+	yearly_metrics: list[YearlyFinancialMetric] = Field(default_factory=list)
+
+
+class CompanyComparisonResponse(BaseModel):
+	requested_tickers: list[str]
+	missing_tickers: list[str] = Field(default_factory=list)
+	companies: list[CompanyComparisonItem] = Field(default_factory=list)
+
+
 class RiskScoreResponse(BaseModel):
 	ticker: str
 	risk_score: str

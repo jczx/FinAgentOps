@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { ChatPlaceholder } from "./components/ChatPlaceholder";
+import { CompanyComparison } from "./components/CompanyComparison";
 import { CompanySelector } from "./components/CompanySelector";
 import { FinancialCharts } from "./components/FinancialCharts";
 import { Footer } from "./components/Footer";
@@ -8,15 +9,32 @@ import { Hero } from "./components/Hero";
 import { KpiCards } from "./components/KpiCards";
 import { PipelineStatusPanel } from "./components/PipelineStatusPanel";
 import { analystPlaceholder } from "./data/dashboardPlaceholders";
-import { fetchDashboardData, type DashboardApiData } from "./services/api";
+import type { CompanyComparison as CompanyComparisonData } from "./data/dashboardTypes";
+import {
+	fetchComparisonData,
+	fetchDashboardData,
+	type DashboardApiData,
+} from "./services/api";
+
+const defaultComparisonTickers = ["AAPL", "MSFT", "NVDA"];
 
 function App() {
 	const [selectedTicker, setSelectedTicker] = useState("AAPL");
+	const [selectedComparisonTickers, setSelectedComparisonTickers] = useState(
+		defaultComparisonTickers,
+	);
 	const [dashboardData, setDashboardData] = useState<DashboardApiData | null>(
 		null,
 	);
+	const [comparisonData, setComparisonData] = useState<CompanyComparisonData[]>(
+		[],
+	);
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
+	const [comparisonErrorMessage, setComparisonErrorMessage] = useState<
+		string | null
+	>(null);
 	const [isLoading, setIsLoading] = useState(true);
+	const [isComparisonLoading, setIsComparisonLoading] = useState(true);
 
 	useEffect(() => {
 		let isMounted = true;
@@ -44,6 +62,44 @@ function App() {
 			isMounted = false;
 		};
 	}, [selectedTicker]);
+
+	useEffect(() => {
+		let isMounted = true;
+
+		if (selectedComparisonTickers.length === 0) {
+			setComparisonData([]);
+			setComparisonErrorMessage(null);
+			setIsComparisonLoading(false);
+			return () => {
+				isMounted = false;
+			};
+		}
+
+		setIsComparisonLoading(true);
+
+		fetchComparisonData(selectedComparisonTickers)
+			.then((data) => {
+				if (isMounted) {
+					setComparisonData(data);
+					setComparisonErrorMessage(null);
+				}
+			})
+			.catch((error: Error) => {
+				if (isMounted) {
+					setComparisonData([]);
+					setComparisonErrorMessage(error.message);
+				}
+			})
+			.finally(() => {
+				if (isMounted) {
+					setIsComparisonLoading(false);
+				}
+			});
+
+		return () => {
+			isMounted = false;
+		};
+	}, [selectedComparisonTickers]);
 
 	const renderDashboard = () => {
 		if (errorMessage) {
@@ -85,6 +141,14 @@ function App() {
 							onTickerChange={setSelectedTicker}
 						/>
 						<KpiCards kpis={kpis} />
+						<CompanyComparison
+							companies={companies}
+							comparisonData={comparisonData}
+							errorMessage={comparisonErrorMessage}
+							isLoading={isComparisonLoading}
+							onSelectionChange={setSelectedComparisonTickers}
+							selectedTickers={selectedComparisonTickers}
+						/>
 						<FinancialCharts metrics={yearlyMetrics} />
 					</div>
 					<aside className="dashboard-grid__sidebar" aria-label="Analysis panels">

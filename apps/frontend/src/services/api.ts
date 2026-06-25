@@ -1,5 +1,6 @@
 import type {
 	Company,
+	CompanyComparison,
 	Kpi,
 	PipelineRun,
 	PipelineStatus,
@@ -41,6 +42,19 @@ type ApiMetricsResponse = {
 	company_name: string;
 	metrics: ApiMetric[];
 	yearly_metrics: ApiYearlyFinancialMetric[];
+};
+
+type ApiComparisonItem = {
+	ticker: string;
+	company_name: string;
+	latest_metric: ApiYearlyFinancialMetric | null;
+	yearly_metrics: ApiYearlyFinancialMetric[];
+};
+
+type ApiComparisonResponse = {
+	requested_tickers: string[];
+	missing_tickers: string[];
+	companies: ApiComparisonItem[];
 };
 
 type ApiMetric = {
@@ -214,6 +228,48 @@ function buildKpis(latestMetric: YearlyFinancialMetric | undefined): Kpi[] {
 export async function fetchCompanies(): Promise<Company[]> {
 	const companies = await getJson<ApiCompany[]>("/companies");
 	return companies.map(mapCompany);
+}
+
+export async function fetchCompanyMetrics(
+	ticker: string,
+): Promise<CompanyComparison> {
+	const metricsResponse = await getJson<ApiMetricsResponse>(
+		`/companies/${ticker}/metrics`,
+	);
+	const yearlyMetrics = metricsResponse.yearly_metrics.map(mapYearlyMetric);
+
+	return {
+		ticker: metricsResponse.ticker,
+		companyName: metricsResponse.company_name,
+		latestMetric: yearlyMetrics[yearlyMetrics.length - 1] ?? null,
+		yearlyMetrics,
+	};
+}
+
+export async function fetchComparisonData(
+	tickers: string[],
+): Promise<CompanyComparison[]> {
+	const uniqueTickers = [...new Set(tickers.map((ticker) => ticker.toUpperCase()))];
+	if (uniqueTickers.length === 0) {
+		return [];
+	}
+
+	const response = await getJson<ApiComparisonResponse>(
+		`/companies/comparison?tickers=${encodeURIComponent(uniqueTickers.join(","))}`,
+	);
+
+	return response.companies.map((company) => {
+		const yearlyMetrics = company.yearly_metrics.map(mapYearlyMetric);
+
+		return {
+			ticker: company.ticker,
+			companyName: company.company_name,
+			latestMetric: company.latest_metric
+				? mapYearlyMetric(company.latest_metric)
+				: null,
+			yearlyMetrics,
+		};
+	});
 }
 
 export async function fetchDashboardData(

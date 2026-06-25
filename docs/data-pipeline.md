@@ -25,18 +25,21 @@ Current tables:
 
 ## Dashboard API Usage
 
-The dashboard now uses real multi-company PostgreSQL data instead of hardcoded company options.
+The dashboard now uses real multi-company PostgreSQL data instead of hardcoded company options. It supports a single-company KPI view and a peer comparison view so multiple companies can be compared across latest-year financial values and revenue trends.
 
 Backend endpoints used by the frontend:
 
 ```text
 GET /companies
+GET /companies/comparison
 GET /companies/{ticker}
 GET /companies/{ticker}/metrics
 GET /pipeline/status
 ```
 
 `GET /companies/{ticker}/metrics` returns yearly rows from `financial_metrics`, sorted by fiscal year. Each yearly metric includes the company ticker, company name, fiscal year, fiscal period, actual financial values, ratio KPIs, growth KPIs, `created_at`, and `updated_at`. Missing numeric values are returned as `null` where the database has no value, and the frontend displays available data without crashing.
+
+`GET /companies/comparison?tickers=AAPL,MSFT,NVDA` returns grouped yearly metrics for up to 5 requested companies. The frontend uses this batch endpoint for the peer comparison table and multi-company revenue trend chart.
 
 `financial_metrics.created_at` records when a yearly metric row was first created by ingestion. `financial_metrics.updated_at` records the most recent ingestion transformation time for that row. These PostgreSQL `TIMESTAMP` values are stored as Berlin-local time using the `Europe/Berlin` timezone. After deploying this schema change, rerun `scripts/ingest_sec_company.py --all` once so existing rows receive timestamp values.
 

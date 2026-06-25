@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import desc, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -11,6 +11,8 @@ from app.db_models import (
 )
 from app.models import (
 	Company,
+	CompanyComparisonItem,
+	CompanyComparisonResponse,
 	CompanyMetricsResponse,
 	Metric,
 	RiskScoreResponse,
@@ -57,6 +59,31 @@ def safe_float(value: float | None) -> float:
 	return 0.0 if value is None else value
 
 
+def yearly_metric_response(
+	company: CompanyRecord,
+	row: FinancialMetricRecord,
+) -> YearlyFinancialMetric:
+	return YearlyFinancialMetric(
+		ticker=company.ticker,
+		company_name=company.name,
+		fiscal_year=row.fiscal_year,
+		fiscal_period=row.fiscal_period,
+		revenue=row.revenue,
+		net_income=row.net_income,
+		total_assets=row.total_assets,
+		total_liabilities=row.total_liabilities,
+		operating_cash_flow=row.operating_cash_flow,
+		profit_margin=safe_float(row.profit_margin),
+		debt_to_assets_ratio=row.debt_to_assets_ratio,
+		return_on_assets=row.return_on_assets,
+		operating_cash_flow_margin=row.operating_cash_flow_margin,
+		revenue_growth=safe_float(row.revenue_growth),
+		net_income_growth=row.net_income_growth,
+		created_at=optional_datetime_iso(getattr(row, "created_at", None)),
+		updated_at=optional_datetime_iso(getattr(row, "updated_at", None)),
+	)
+
+
 def get_company_record_or_404(ticker: str, db: Session) -> CompanyRecord:
 	normalized_ticker = normalize_ticker(ticker)
 
@@ -84,6 +111,86 @@ def list_companies(db: Session = Depends(get_db)) -> list[Company]:
 		raise database_unavailable_error() from error
 
 	return [company_response(company) for company in companies]
+
+
+@router.get("/comparison", response_model=CompanyComparisonResponse)
+def compare_companies(
+	tickers: str = Query(
+		...,
+		description="Comma-separated ticker list, for example AAPL,MSFT,NVDA.",
+	),
+	db: Session = Depends(get_db),
+) -> CompanyComparisonResponse:
+	requested_tickers = []
+	for ticker in tickers.split(","):
+		normalized_ticker = normalize_ticker(ticker)
+		if normalized_ticker and normalized_ticker not in requested_tickers:
+			requested_tickers.append(normalized_ticker)
+
+	if not requested_tickers:
+		raise HTTPException(
+			status_code=400,
+			detail="Provide at least one ticker, for example ?tickers=AAPL,MSFT.",
+		)
+
+	if len(requested_tickers) > 5:
+		raise HTTPException(
+			status_code=400,
+			detail="Compare up to 5 companies at a time.",
+		)
+
+	try:
+		companies = db.scalars(
+			select(CompanyRecord)
+			.where(CompanyRecord.ticker.in_(requested_tickers))
+			.order_by(CompanyRecord.ticker),
+		).all()
+		company_by_ticker = {company.ticker: company for company in companies}
+		metric_records = db.scalars(
+			select(FinancialMetricRecord)
+			.join(CompanyRecord)
+			.where(CompanyRecord.ticker.in_(requested_tickers))
+			.where(FinancialMetricRecord.fiscal_period != "Demo FY")
+			.where(FinancialMetricRecord.fiscal_year.is_not(None))
+			.order_by(CompanyRecord.ticker, FinancialMetricRecord.fiscal_year),
+		).all()
+	except SQLAlchemyError as error:
+		raise database_unavailable_error() from error
+
+	metrics_by_ticker: dict[str, list[FinancialMetricRecord]] = {
+		ticker: [] for ticker in requested_tickers
+	}
+	for metric_record in metric_records:
+		metrics_by_ticker.setdefault(metric_record.company.ticker, []).append(
+			metric_record,
+		)
+
+	comparison_items = []
+	for ticker in requested_tickers:
+		company = company_by_ticker.get(ticker)
+		if company is None:
+			continue
+
+		yearly_metrics = [
+			yearly_metric_response(company, row)
+			for row in metrics_by_ticker.get(ticker, [])
+		]
+		comparison_items.append(
+			CompanyComparisonItem(
+				ticker=company.ticker,
+				company_name=company.name,
+				latest_metric=yearly_metrics[-1] if yearly_metrics else None,
+				yearly_metrics=yearly_metrics,
+			),
+		)
+
+	return CompanyComparisonResponse(
+		requested_tickers=requested_tickers,
+		missing_tickers=[
+			ticker for ticker in requested_tickers if ticker not in company_by_ticker
+		],
+		companies=comparison_items,
+	)
 
 
 @router.get("/{ticker}", response_model=Company)
@@ -176,28 +283,7 @@ def get_company_metrics(
 		ticker=company.ticker,
 		company_name=company.name,
 		metrics=metrics,
-		yearly_metrics=[
-			YearlyFinancialMetric(
-				ticker=company.ticker,
-				company_name=company.name,
-				fiscal_year=row.fiscal_year,
-				fiscal_period=row.fiscal_period,
-				revenue=row.revenue,
-				net_income=row.net_income,
-				total_assets=row.total_assets,
-				total_liabilities=row.total_liabilities,
-				operating_cash_flow=row.operating_cash_flow,
-				profit_margin=safe_float(row.profit_margin),
-				debt_to_assets_ratio=row.debt_to_assets_ratio,
-				return_on_assets=row.return_on_assets,
-				operating_cash_flow_margin=row.operating_cash_flow_margin,
-				revenue_growth=safe_float(row.revenue_growth),
-				net_income_growth=row.net_income_growth,
-				created_at=optional_datetime_iso(getattr(row, "created_at", None)),
-				updated_at=optional_datetime_iso(getattr(row, "updated_at", None)),
-			)
-			for row in metric_records
-		],
+		yearly_metrics=[yearly_metric_response(company, row) for row in metric_records],
 	)
 
 

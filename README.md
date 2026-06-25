@@ -235,7 +235,7 @@ This cron setup is a local development scheduler. Later, the same ingestion work
 
 ### Run Frontend and Backend Together
 
-The frontend reads live multi-company financial data from the FastAPI backend. The backend reads company records, SEC facts, yearly financial metrics, and pipeline status from PostgreSQL. You need three running pieces: PostgreSQL, the backend API, and the Vite frontend.
+The frontend reads live multi-company financial data from the FastAPI backend. The backend reads company records, SEC facts, yearly financial metrics, and pipeline status from PostgreSQL. The dashboard supports both a single-company KPI view and a peer comparison view for revenue, net income, profitability, leverage, and revenue trends. You need three running pieces: PostgreSQL, the backend API, and the Vite frontend.
 
 First, ensure PostgreSQL is running. For local Docker Compose:
 
@@ -253,7 +253,7 @@ cd apps/backend
 uvicorn app.main:app --reload
 ```
 
-On startup, FastAPI creates any missing initial tables and runs the idempotent Apple/AAPL seed. The dashboard company selector is populated from `GET /companies`, and each selected company loads yearly metrics from `GET /companies/{ticker}/metrics`.
+On startup, FastAPI creates any missing initial tables and runs the idempotent Apple/AAPL seed. The dashboard company selector is populated from `GET /companies`, each selected company loads yearly metrics from `GET /companies/{ticker}/metrics`, and the peer comparison panel loads grouped metrics from `GET /companies/comparison`.
 
 Terminal 2, start the frontend:
 
@@ -289,6 +289,7 @@ Useful API checks:
 GET http://127.0.0.1:8000/companies
 GET http://127.0.0.1:8000/companies/AAPL
 GET http://127.0.0.1:8000/companies/AAPL/metrics
+GET http://127.0.0.1:8000/companies/comparison?tickers=AAPL,MSFT,NVDA
 GET http://127.0.0.1:8000/companies/MSFT/metrics
 GET http://127.0.0.1:8000/pipeline/status
 ```

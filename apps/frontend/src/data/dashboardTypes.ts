@@ -32,6 +32,13 @@ export type YearlyFinancialMetric = {
 	updatedAt: string | null;
 };
 
+export type CompanyComparison = {
+	ticker: string;
+	companyName: string;
+	latestMetric: YearlyFinancialMetric | null;
+	yearlyMetrics: YearlyFinancialMetric[];
+};
+
 export type PipelineStatus = {
 	status: string;
 	lastRun: string;
