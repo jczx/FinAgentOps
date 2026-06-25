@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import desc, select
 from sqlalchemy.exc import SQLAlchemyError
@@ -7,7 +9,6 @@ from app.database import get_db
 from app.db_models import (
 	CompanyRecord,
 	FinancialMetricRecord,
-	ModelPredictionRecord,
 )
 from app.models import (
 	Company,
@@ -21,8 +22,12 @@ from app.models import (
 	YearlyFinancialMetric,
 )
 from app.services.financial_health import calculate_financial_health_score
+from app.services.risk_model import predict_risk_from_metric
 
 router = APIRouter(prefix="/companies", tags=["companies"])
+REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
+MODEL_PATH = REPOSITORY_ROOT / "models" / "risk_model.joblib"
+MODEL_METADATA_PATH = REPOSITORY_ROOT / "models" / "risk_model_metadata.json"
 
 
 def normalize_ticker(ticker: str) -> str:
@@ -346,23 +351,53 @@ def get_company_risk_score(
 	company = get_company_record_or_404(ticker, db)
 
 	try:
-		risk_score = db.scalar(
-			select(ModelPredictionRecord)
-			.where(ModelPredictionRecord.company_id == company.id)
-			.order_by(desc(ModelPredictionRecord.id)),
+		metric_record = db.scalar(
+			select(FinancialMetricRecord)
+			.where(FinancialMetricRecord.company_id == company.id)
+			.where(FinancialMetricRecord.fiscal_period != "Demo FY")
+			.where(FinancialMetricRecord.fiscal_year.is_not(None))
+			.order_by(desc(FinancialMetricRecord.fiscal_year)),
 		)
 	except SQLAlchemyError as error:
 		raise database_unavailable_error() from error
 
-	if risk_score is None:
+	if metric_record is None:
 		raise HTTPException(
 			status_code=404,
-			detail=f"Risk score for ticker '{company.ticker}' was not found.",
+			detail=(
+				f"No yearly metrics were found for ticker '{company.ticker}'. "
+				"Run SEC ingestion first, then train the model."
+			),
 		)
+
+	try:
+		prediction = predict_risk_from_metric(
+			metric=metric_record,
+			model_path=MODEL_PATH,
+			metadata_path=MODEL_METADATA_PATH,
+		)
+	except FileNotFoundError as error:
+		raise HTTPException(
+			status_code=404,
+			detail=(
+				"Risk model artifact was not found. Run "
+				"`python scripts/train_risk_model.py` first."
+			),
+		) from error
 
 	return RiskScoreResponse(
 		ticker=company.ticker,
-		risk_score=risk_score.risk_score,
-		summary=risk_score.summary,
-		factors=[factor for factor in risk_score.factors.split("|") if factor],
+		company_name=company.name,
+		fiscal_year=metric_record.fiscal_year,
+		risk_probability=prediction.probability,
+		risk_label=prediction.label,
+		risk_score=prediction.label,
+		model_type=prediction.model_type,
+		summary=prediction.summary,
+		feature_columns=prediction.feature_columns,
+		factors=[
+			"Baseline Random Forest model trained from yearly financial metrics.",
+			"Prediction estimates next-year financial deterioration risk.",
+			"This is an educational model, not investment advice.",
+		],
 	)

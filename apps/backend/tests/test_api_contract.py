@@ -220,6 +220,64 @@ def test_company_health_score_returns_latest_metric_score(
 	]
 
 
+def test_company_risk_score_returns_model_prediction(
+	client: TestClient,
+	monkeypatch,
+) -> None:
+	from app.database import SessionLocal
+	from app.db_models import CompanyRecord, FinancialMetricRecord
+	from app.services.risk_model import RiskModelPrediction
+
+	def fake_predict_risk_from_metric(*args, **kwargs) -> RiskModelPrediction:
+		return RiskModelPrediction(
+			probability=0.42,
+			label="Medium",
+			summary="Baseline model estimates medium next-year financial deterioration risk.",
+			model_type="RandomForestClassifier",
+			feature_columns=["revenue", "net_income"],
+		)
+
+	monkeypatch.setattr(
+		"app.routes.companies.predict_risk_from_metric",
+		fake_predict_risk_from_metric,
+	)
+
+	with SessionLocal() as db:
+		company = db.scalar(select(CompanyRecord).where(CompanyRecord.ticker == "AAPL"))
+		assert company is not None
+		db.add(
+			FinancialMetricRecord(
+				company_id=company.id,
+				fiscal_year=2023,
+				fiscal_period="FY 2023",
+				revenue=120,
+				net_income=30,
+				revenue_growth=20.0,
+				net_income_growth=10.0,
+				profit_margin=25.0,
+				debt_to_assets=40.0,
+				debt_to_assets_ratio=40.0,
+				return_on_assets=12.0,
+				operating_cash_flow_margin=30.0,
+				free_cash_flow_margin=30.0,
+			)
+		)
+		db.commit()
+
+	response = client.get("/companies/AAPL/risk-score")
+
+	assert response.status_code == 200
+	body = response.json()
+	assert body["ticker"] == "AAPL"
+	assert body["company_name"] == "Apple Inc."
+	assert body["fiscal_year"] == 2023
+	assert body["risk_probability"] == 0.42
+	assert body["risk_label"] == "Medium"
+	assert body["risk_score"] == "Medium"
+	assert body["model_type"] == "RandomForestClassifier"
+	assert body["feature_columns"] == ["revenue", "net_income"]
+
+
 def test_pipeline_status_returns_latest_runs(client: TestClient) -> None:
 	from app.database import SessionLocal
 	from app.db_models import PipelineRunRecord

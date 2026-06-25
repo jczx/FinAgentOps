@@ -11,6 +11,7 @@ from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_sc
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 
+from app.db_models import FinancialMetricRecord
 from app.services.ml_features import MLFeatureRow
 
 
@@ -42,8 +43,69 @@ class RiskModelTrainingResult:
 	target_positive_rate: float
 
 
+@dataclass(frozen=True)
+class RiskModelPrediction:
+	probability: float
+	label: str
+	summary: str
+	model_type: str
+	feature_columns: list[str]
+
+
 def feature_matrix(rows: list[MLFeatureRow]) -> list[list[float | None]]:
 	return [[getattr(row, column) for column in FEATURE_COLUMNS] for row in rows]
+
+
+def feature_vector_from_metric(metric: FinancialMetricRecord) -> list[float | None]:
+	return [getattr(metric, column) for column in FEATURE_COLUMNS]
+
+
+def label_for_probability(probability: float) -> str:
+	if probability >= 0.65:
+		return "High"
+	if probability >= 0.35:
+		return "Medium"
+
+	return "Low"
+
+
+def summary_for_prediction(label: str, probability: float) -> str:
+	return (
+		"Baseline model estimates "
+		f"{label.lower()} next-year financial deterioration risk "
+		f"with probability {probability:.1%}."
+	)
+
+
+def load_model_metadata(metadata_path: Path) -> dict:
+	if not metadata_path.exists():
+		return {}
+
+	return json.loads(metadata_path.read_text(encoding="utf-8"))
+
+
+def predict_risk_from_metric(
+	metric: FinancialMetricRecord,
+	model_path: Path,
+	metadata_path: Path,
+) -> RiskModelPrediction:
+	if not model_path.exists():
+		raise FileNotFoundError(
+			f"Risk model artifact was not found at {model_path}. Train the model first.",
+		)
+
+	model = joblib.load(model_path)
+	probability = float(model.predict_proba([feature_vector_from_metric(metric)])[0][1])
+	label = label_for_probability(probability)
+	metadata = load_model_metadata(metadata_path)
+
+	return RiskModelPrediction(
+		probability=round(probability, 4),
+		label=label,
+		summary=summary_for_prediction(label, probability),
+		model_type=str(metadata.get("model_type", type(model).__name__)),
+		feature_columns=list(metadata.get("feature_columns", FEATURE_COLUMNS)),
+	)
 
 
 def target_vector(rows: list[MLFeatureRow]) -> list[int]:

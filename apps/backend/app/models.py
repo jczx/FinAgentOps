@@ -80,9 +80,15 @@ class FinancialHealthScoreResponse(BaseModel):
 
 class RiskScoreResponse(BaseModel):
 	ticker: str
+	company_name: str | None = None
+	fiscal_year: int | None = None
+	risk_probability: float | None = None
+	risk_label: str | None = None
 	risk_score: str
+	model_type: str | None = None
 	summary: str
-	factors: list[str]
+	feature_columns: list[str] = Field(default_factory=list)
+	factors: list[str] = Field(default_factory=list)
 
 
 class PipelineRun(BaseModel):

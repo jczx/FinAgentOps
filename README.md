@@ -381,3 +381,11 @@ The generated feature CSV and model artifacts are local outputs and are ignored 
 data/processed/ml_features.csv
 models/
 ```
+
+After training, the backend risk endpoint uses the saved local model artifact:
+
+```text
+GET /companies/AAPL/risk-score
+```
+
+The response includes the latest fiscal year, risk probability, risk label, model type, and the feature columns used by the baseline model.
