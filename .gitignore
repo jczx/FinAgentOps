@@ -16,6 +16,7 @@ build/
 tree.txt
 logs/
 docs/
+data/processed/*.csv
 .DS_Store
 
 scratch.sql

@@ -1,3 +1,14 @@
+import { useEffect, useMemo, useRef } from "react";
+import {
+	ColorType,
+	CrosshairMode,
+	createChart,
+	LineSeries,
+	LineStyle,
+	type IChartApi,
+	type LineData,
+	type Time,
+} from "lightweight-charts";
 import type {
 	Company,
 	CompanyComparison,
@@ -27,12 +38,8 @@ type CompareMetric = {
 	lowerIsBetter?: boolean;
 };
 
-type TrendPoint = {
-	x: number;
-	y: number;
-};
-
 const maxSelectedCompanies = 5;
+const comparisonColors = ["#f5f5f5", "#cfcfcf", "#a8a8a8", "#7a7a7a", "#5f5f5f"];
 
 const compareMetrics: CompareMetric[] = [
 	{ key: "revenue", label: "Revenue", unit: "currency" },
@@ -76,37 +83,161 @@ function formatValue(value: number | null, unit: CompareMetric["unit"]): string 
 	}).format(value);
 }
 
-function buildRevenueTrendPath(
-	yearlyMetrics: YearlyFinancialMetric[],
-	minValue: number,
-	maxValue: number,
-	years: number[],
-): string {
-	const denominator = maxValue - minValue || 1;
-	const width = 100;
-	const height = 100;
-	const revenueByYear = new Map(
-		yearlyMetrics
-			.filter(
-				(metric) => metric.fiscalYear !== null && metric.revenue !== null,
-			)
-			.map((metric) => [metric.fiscalYear as number, metric.revenue as number]),
-	);
+function metricTime(metric: YearlyFinancialMetric): Time | null {
+	if (metric.fiscalYear === null) {
+		return null;
+	}
 
-	const points = years.reduce<TrendPoint[]>((items, year, index) => {
-		const value = revenueByYear.get(year);
-		if (value === undefined) {
+	return `${metric.fiscalYear}-12-31`;
+}
+
+function revenueSeriesData(metrics: YearlyFinancialMetric[]): LineData<Time>[] {
+	return metrics.reduce<LineData<Time>[]>((items, metric) => {
+		const time = metricTime(metric);
+		if (time === null || metric.revenue === null) {
 			return items;
 		}
 
-		items.push({
-			x: years.length > 1 ? (index / (years.length - 1)) * width : width / 2,
-			y: height - ((value - minValue) / denominator) * height,
-		});
+		items.push({ time, value: metric.revenue });
 		return items;
 	}, []);
+}
 
-	return points.map((point) => `${point.x},${point.y}`).join(" ");
+function latestRevenue(metrics: YearlyFinancialMetric[]): number | null {
+	for (let index = metrics.length - 1; index >= 0; index -= 1) {
+		const revenue = metrics[index].revenue;
+		if (revenue !== null) {
+			return revenue;
+		}
+	}
+
+	return null;
+}
+
+function ComparisonRevenueChart({
+	comparisonData,
+}: {
+	comparisonData: CompanyComparison[];
+}) {
+	const containerRef = useRef<HTMLDivElement | null>(null);
+	const chartRef = useRef<IChartApi | null>(null);
+	const series = useMemo(
+		() =>
+			comparisonData.map((company, index) => ({
+				color: comparisonColors[index] ?? "#5f5f5f",
+				data: revenueSeriesData(company.yearlyMetrics),
+				latestRevenue: latestRevenue(company.yearlyMetrics),
+				ticker: company.ticker,
+			})),
+		[comparisonData],
+	);
+	const hasData = series.some((item) => item.data.length > 0);
+
+	useEffect(() => {
+		const container = containerRef.current;
+		if (!container || !hasData) {
+			return undefined;
+		}
+
+		const chart = createChart(container, {
+			autoSize: true,
+			crosshair: {
+				mode: CrosshairMode.Normal,
+				horzLine: {
+					color: "rgba(245, 245, 245, 0.22)",
+					labelBackgroundColor: "#111111",
+				},
+				vertLine: {
+					color: "rgba(245, 245, 245, 0.22)",
+					labelBackgroundColor: "#111111",
+					style: LineStyle.Dashed,
+				},
+			},
+			grid: {
+				horzLines: { color: "rgba(255, 255, 255, 0.06)" },
+				vertLines: { color: "rgba(255, 255, 255, 0.04)" },
+			},
+			layout: {
+				background: { color: "#111111", type: ColorType.Solid },
+				fontFamily:
+					"Inter, Manrope, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+				textColor: "#b3b3b3",
+			},
+			localization: {
+				priceFormatter: (value: number) =>
+					new Intl.NumberFormat("en-US", {
+						compactDisplay: "short",
+						maximumFractionDigits: 1,
+						notation: "compact",
+					}).format(value),
+			},
+			rightPriceScale: {
+				borderColor: "rgba(255, 255, 255, 0.12)",
+				scaleMargins: {
+					bottom: 0.18,
+					top: 0.12,
+				},
+			},
+			timeScale: {
+				borderColor: "rgba(255, 255, 255, 0.12)",
+				fixLeftEdge: true,
+				fixRightEdge: true,
+				timeVisible: true,
+			},
+		});
+		chartRef.current = chart;
+
+		for (const item of series) {
+			if (item.data.length === 0) {
+				continue;
+			}
+
+			const line = chart.addSeries(LineSeries, {
+				color: item.color,
+				crosshairMarkerBorderColor: "#0a0a0a",
+				crosshairMarkerBorderWidth: 2,
+				crosshairMarkerRadius: 4,
+				lastValueVisible: true,
+				lineWidth: 2,
+				priceFormat: { type: "volume" },
+				priceLineColor: "rgba(245, 245, 245, 0.16)",
+				priceLineStyle: LineStyle.Dotted,
+				title: item.ticker,
+			});
+			line.setData(item.data);
+		}
+
+		chart.timeScale().fitContent();
+
+		return () => {
+			chart.remove();
+			chartRef.current = null;
+		};
+	}, [hasData, series]);
+
+	if (!hasData) {
+		return <p className="empty-state">No revenue trend data is available yet.</p>;
+	}
+
+	return (
+		<>
+			<div
+				ref={containerRef}
+				className="comparison-trading-chart"
+				role="img"
+				aria-label="Revenue trend comparison"
+			/>
+			<div className="comparison-legend">
+				{series.map((company) => (
+					<span key={company.ticker}>
+						<i style={{ color: company.color }} />
+						{company.ticker}
+						<small>{formatValue(company.latestRevenue, "currency")}</small>
+					</span>
+				))}
+			</div>
+		</>
+	);
 }
 
 export function CompanyComparison({
@@ -119,24 +250,6 @@ export function CompanyComparison({
 }: CompanyComparisonProps) {
 	const selectedSet = new Set(selectedTickers);
 	const hasReachedLimit = selectedTickers.length >= maxSelectedCompanies;
-	const allRevenueValues = comparisonData.flatMap((company) =>
-		company.yearlyMetrics
-			.map((metric) => metric.revenue)
-			.filter((value): value is number => value !== null),
-	);
-	const minRevenue =
-		allRevenueValues.length > 0 ? Math.min(...allRevenueValues) : 0;
-	const maxRevenue =
-		allRevenueValues.length > 0 ? Math.max(...allRevenueValues) : 1;
-	const trendYears = [
-		...new Set(
-			comparisonData.flatMap((company) =>
-				company.yearlyMetrics
-					.map((metric) => metric.fiscalYear)
-					.filter((year): year is number => year !== null),
-			),
-		),
-	].sort((left, right) => left - right);
 
 	const toggleTicker = (ticker: string) => {
 		if (selectedSet.has(ticker)) {
@@ -221,40 +334,12 @@ export function CompanyComparison({
 						))}
 					</div>
 
-					<div
-						className="comparison-trend"
-						role="img"
-						aria-label="Revenue trend comparison"
-					>
-						<svg viewBox="0 0 100 100" preserveAspectRatio="none">
-							<line x1="0" x2="100" y1="25" y2="25" className="chart-gridline" />
-							<line x1="0" x2="100" y1="50" y2="50" className="chart-gridline" />
-							<line x1="0" x2="100" y1="75" y2="75" className="chart-gridline" />
-							{comparisonData.map((company, index) => (
-								<polyline
-									className={`comparison-trend__line comparison-trend__line--${index + 1}`}
-									key={company.ticker}
-									points={buildRevenueTrendPath(
-										company.yearlyMetrics,
-										minRevenue,
-										maxRevenue,
-										trendYears,
-									)}
-								/>
-							))}
-						</svg>
-					</div>
-					<div className="chart-axis">
-						<span>{trendYears[0] ?? "N/A"}</span>
-						<span>{trendYears[trendYears.length - 1] ?? "N/A"}</span>
-					</div>
-					<div className="comparison-legend">
-						{comparisonData.map((company, index) => (
-							<span key={company.ticker}>
-								<i className={`comparison-trend__line--${index + 1}`} />
-								{company.ticker}
-							</span>
-						))}
+					<div className="comparison-chart-block">
+						<div className="comparison-chart-block__heading">
+							<strong>Revenue trend</strong>
+							<span>TradingView-style peer view</span>
+						</div>
+						<ComparisonRevenueChart comparisonData={comparisonData} />
 					</div>
 				</>
 			)}
