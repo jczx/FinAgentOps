@@ -360,3 +360,24 @@ http://127.0.0.1:8000/docs
 The backend loads environment variables from either the repository root `.env` or `apps/backend/.env`. A backend-specific file takes precedence when both exist.
 
 The data ingestion pipeline, machine learning workflow, and AI agent will be added in later project phases.
+
+### Machine Learning Baseline
+
+Build the local ML feature dataset from PostgreSQL:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\build_ml_features.py
+```
+
+Train the first baseline financial deterioration model:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\train_risk_model.py
+```
+
+The generated feature CSV and model artifacts are local outputs and are ignored by Git:
+
+```text
+data/processed/ml_features.csv
+models/
+```

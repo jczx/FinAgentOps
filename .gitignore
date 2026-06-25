@@ -17,6 +17,7 @@ tree.txt
 logs/
 docs/
 data/processed/*.csv
+models/
 .DS_Store
 
 scratch.sql
