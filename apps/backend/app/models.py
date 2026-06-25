@@ -61,6 +61,23 @@ class CompanyComparisonResponse(BaseModel):
 	companies: list[CompanyComparisonItem] = Field(default_factory=list)
 
 
+class HealthScoreComponent(BaseModel):
+	name: str
+	score: float
+	explanation: str
+
+
+class FinancialHealthScoreResponse(BaseModel):
+	ticker: str
+	company_name: str
+	fiscal_year: int | None
+	fiscal_period: str
+	score: float
+	grade: str
+	summary: str
+	components: list[HealthScoreComponent]
+
+
 class RiskScoreResponse(BaseModel):
 	ticker: str
 	risk_score: str

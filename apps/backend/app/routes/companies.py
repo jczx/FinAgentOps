@@ -14,10 +14,13 @@ from app.models import (
 	CompanyComparisonItem,
 	CompanyComparisonResponse,
 	CompanyMetricsResponse,
+	FinancialHealthScoreResponse,
+	HealthScoreComponent,
 	Metric,
 	RiskScoreResponse,
 	YearlyFinancialMetric,
 )
+from app.services.financial_health import calculate_financial_health_score
 
 router = APIRouter(prefix="/companies", tags=["companies"])
 
@@ -284,6 +287,54 @@ def get_company_metrics(
 		company_name=company.name,
 		metrics=metrics,
 		yearly_metrics=[yearly_metric_response(company, row) for row in metric_records],
+	)
+
+
+@router.get("/{ticker}/health-score", response_model=FinancialHealthScoreResponse)
+def get_company_health_score(
+	ticker: str,
+	db: Session = Depends(get_db),
+) -> FinancialHealthScoreResponse:
+	company = get_company_record_or_404(ticker, db)
+
+	try:
+		metric_record = db.scalar(
+			select(FinancialMetricRecord)
+			.where(FinancialMetricRecord.company_id == company.id)
+			.where(FinancialMetricRecord.fiscal_period != "Demo FY")
+			.where(FinancialMetricRecord.fiscal_year.is_not(None))
+			.order_by(desc(FinancialMetricRecord.fiscal_year)),
+		)
+	except SQLAlchemyError as error:
+		raise database_unavailable_error() from error
+
+	if metric_record is None:
+		raise HTTPException(
+			status_code=404,
+			detail=(
+				f"No yearly metrics were found for ticker '{company.ticker}'. "
+				"Run SEC ingestion first, then try again."
+			),
+		)
+
+	health_score = calculate_financial_health_score(metric_record)
+
+	return FinancialHealthScoreResponse(
+		ticker=company.ticker,
+		company_name=company.name,
+		fiscal_year=metric_record.fiscal_year,
+		fiscal_period=metric_record.fiscal_period,
+		score=health_score.score,
+		grade=health_score.grade,
+		summary=health_score.summary,
+		components=[
+			HealthScoreComponent(
+				name=component.name,
+				score=round(component.score, 1),
+				explanation=component.explanation,
+			)
+			for component in health_score.components
+		],
 	)
 
 

@@ -253,7 +253,7 @@ cd apps/backend
 uvicorn app.main:app --reload
 ```
 
-On startup, FastAPI creates any missing initial tables and runs the idempotent Apple/AAPL seed. The dashboard company selector is populated from `GET /companies`, each selected company loads yearly metrics from `GET /companies/{ticker}/metrics`, and the peer comparison panel loads grouped metrics from `GET /companies/comparison`.
+On startup, FastAPI creates any missing initial tables and runs the idempotent Apple/AAPL seed. The dashboard company selector is populated from `GET /companies`, each selected company loads yearly metrics from `GET /companies/{ticker}/metrics`, and the peer comparison panel loads grouped metrics from `GET /companies/comparison`. The backend also exposes a rule-based financial health score at `GET /companies/{ticker}/health-score`.
 
 Terminal 2, start the frontend:
 
@@ -289,6 +289,7 @@ Useful API checks:
 GET http://127.0.0.1:8000/companies
 GET http://127.0.0.1:8000/companies/AAPL
 GET http://127.0.0.1:8000/companies/AAPL/metrics
+GET http://127.0.0.1:8000/companies/AAPL/health-score
 GET http://127.0.0.1:8000/companies/comparison?tickers=AAPL,MSFT,NVDA
 GET http://127.0.0.1:8000/companies/MSFT/metrics
 GET http://127.0.0.1:8000/pipeline/status

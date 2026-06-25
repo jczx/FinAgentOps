@@ -176,6 +176,50 @@ def test_company_comparison_rejects_more_than_five_tickers(
 	assert response.json()["detail"] == "Compare up to 5 companies at a time."
 
 
+def test_company_health_score_returns_latest_metric_score(
+	client: TestClient,
+) -> None:
+	from app.database import SessionLocal
+	from app.db_models import CompanyRecord, FinancialMetricRecord
+
+	with SessionLocal() as db:
+		company = db.scalar(select(CompanyRecord).where(CompanyRecord.ticker == "AAPL"))
+		assert company is not None
+		db.add(
+			FinancialMetricRecord(
+				company_id=company.id,
+				fiscal_year=2023,
+				fiscal_period="FY 2023",
+				revenue=120,
+				net_income=30,
+				revenue_growth=20.0,
+				net_income_growth=10.0,
+				profit_margin=25.0,
+				debt_to_assets=40.0,
+				debt_to_assets_ratio=40.0,
+				return_on_assets=12.0,
+				operating_cash_flow_margin=30.0,
+				free_cash_flow_margin=30.0,
+			)
+		)
+		db.commit()
+
+	response = client.get("/companies/AAPL/health-score")
+
+	assert response.status_code == 200
+	body = response.json()
+	assert body["ticker"] == "AAPL"
+	assert body["fiscal_year"] == 2023
+	assert body["score"] == 81.4
+	assert body["grade"] == "B"
+	assert [component["name"] for component in body["components"]] == [
+		"growth",
+		"profitability",
+		"leverage",
+		"cash_flow",
+	]
+
+
 def test_pipeline_status_returns_latest_runs(client: TestClient) -> None:
 	from app.database import SessionLocal
 	from app.db_models import PipelineRunRecord
@@ -185,9 +229,9 @@ def test_pipeline_status_returns_latest_runs(client: TestClient) -> None:
 			PipelineRunRecord(
 				source_name="sec_companyfacts_aapl",
 				status="SUCCESS",
-				started_at=datetime(2026, 6, 25, 6, 0, 0),
-				finished_at=datetime(2026, 6, 25, 6, 1, 0),
-				last_run_at=datetime(2026, 6, 25, 6, 1, 0),
+				started_at=datetime(2099, 6, 25, 6, 0, 0),
+				finished_at=datetime(2099, 6, 25, 6, 1, 0),
+				last_run_at=datetime(2099, 6, 25, 6, 1, 0),
 				records_processed=42,
 				steps_completed=4,
 				total_steps=4,

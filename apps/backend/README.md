@@ -197,6 +197,7 @@ http://127.0.0.1:8000/health
 http://127.0.0.1:8000/companies
 http://127.0.0.1:8000/companies/AAPL
 http://127.0.0.1:8000/companies/AAPL/metrics
+http://127.0.0.1:8000/companies/AAPL/health-score
 http://127.0.0.1:8000/companies/comparison?tickers=AAPL,MSFT,NVDA
 http://127.0.0.1:8000/companies/AAPL/risk-score
 http://127.0.0.1:8000/pipeline/status
@@ -216,6 +217,7 @@ docker compose down
 - `GET /companies`
 - `GET /companies/comparison?tickers=AAPL,MSFT,NVDA`
 - `GET /companies/{ticker}`
+- `GET /companies/{ticker}/health-score`
 - `GET /companies/{ticker}/metrics`
 - `GET /companies/{ticker}/risk-score`
 - `GET /pipeline/status`
